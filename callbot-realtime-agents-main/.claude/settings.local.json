@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/hanhnd/go/src/github.com/callbot-pj/freeswitch-openai-bridge/**)",
+      "Bash(go build ./...)",
+      "Bash(cd /Users/hanhnd/go/src/github.com/callbot-pj/freeswitch-openai-bridge && go build ./... 2>&1; echo \"exit:$?\")"
+    ]
+  }
+}

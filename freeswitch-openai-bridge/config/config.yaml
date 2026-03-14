@@ -1,0 +1,16 @@
+server:
+  port: 8083
+
+freeswitch:
+  host: "127.0.0.1:8021"
+  password: "ClueCon"
+  domain: "voiceai.autotele.vn"
+
+relay:
+  url: "ws://localhost:8091"
+  api_key: ""
+  audio_sample_rate: 8000  # set to 24000 if relay sends 24kHz (e.g. OpenAI TTS)
+
+audio:
+  record_path: "/dev/shm/bridge/recordings"
+  tts_path: "/dev/shm/bridge/tts"

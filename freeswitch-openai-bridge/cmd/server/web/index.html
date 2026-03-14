@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CallBot Control Panel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242736;
+      --border: #2e3144;
+      --text: #e4e6f0;
+      --text2: #8b8fa3;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      color: var(--text2);
+      border-bottom: 2px solid transparent;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all .15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .form-row.full { grid-template-columns: 1fr; }
+
+    label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 60px; font-family: monospace; font-size: 13px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-outline { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--text2); color: var(--text); }
+
+    .file-drop {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      text-align: center;
+      color: var(--text2);
+      cursor: pointer;
+      transition: border-color .15s;
+      position: relative;
+    }
+    .file-drop:hover, .file-drop.dragover { border-color: var(--accent); color: var(--accent); }
+    .file-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .file-drop .filename { color: var(--green); font-weight: 500; margin-top: 6px; }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      color: #fff;
+      z-index: 999;
+      animation: slideIn .3s;
+    }
+    .toast.success { background: var(--green); }
+    .toast.error { background: var(--red); }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .stat-card {
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-card .num { font-size: 24px; font-weight: 700; }
+    .stat-card .lbl { font-size: 12px; color: var(--text2); margin-top: 2px; }
+    .stat-card.green .num { color: var(--green); }
+    .stat-card.red .num { color: var(--red); }
+    .stat-card.blue .num { color: var(--blue); }
+    .stat-card.yellow .num { color: var(--yellow); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 10px; color: var(--text2); font-weight: 500; border-bottom: 1px solid var(--border); }
+    td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-pending { background: #374151; color: #9ca3af; }
+    .badge-dialing { background: #1e3a5f; color: var(--blue); }
+    .badge-completed { background: #14532d; color: var(--green); }
+    .badge-failed { background: #450a0a; color: var(--red); }
+    .badge-running { background: #1e3a5f; color: var(--blue); }
+    .badge-done { background: #14532d; color: var(--green); }
+
+    .camp-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .camp-list-item:hover { background: var(--surface2); }
+    .camp-list-item:last-child { border-bottom: none; }
+
+    .empty-state { text-align: center; padding: 40px; color: var(--text2); }
+
+    #result-box {
+      margin-top: 12px;
+      padding: 12px;
+      background: var(--surface2);
+      border-radius: var(--radius);
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="dot"></div>
+  <h1>CallBot Control Panel</h1>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="single">Gọi lẻ</div>
+  <div class="tab" data-tab="campaign">Chiến dịch</div>
+  <div class="tab" data-tab="dashboard">Dashboard</div>
+</div>
+
+<!-- ========== TAB: GỌI LẺ ========== -->
+<div class="container">
+<div class="panel active" id="panel-single">
+  <div class="card">
+    <h2>Tạo cuộc gọi</h2>
+    <div class="form-row">
+      <div>
+        <label>Số điện thoại *</label>
+        <input type="text" id="s-phone" placeholder="0912345678">
+      </div>
+      <div>
+        <label>Kịch bản</label>
+        <input type="text" id="s-scenario" value="leadgenTNDS" placeholder="leadgenTNDS">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Caller ID</label>
+        <input type="text" id="s-caller" placeholder="callbot">
+      </div>
+      <div>
+        <label>SIP Endpoint (thay sđt)</label>
+        <input type="text" id="s-sip" placeholder="sofia/gateway/...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Lead ID</label>
+        <input type="text" id="s-leadid">
+      </div>
+      <div>
+        <label>Giọng đọc TTS</label>
+        <select id="s-voice">
+          <option value="">Đang tải...</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <label>Custom Data (JSON) — chứa thông tin lead: gender, name, plate, v.v.</label>
+        <textarea id="s-custom" rows="4" placeholder='{"gender": "Anh", "name": "Tùng", "plate": "50A-12345"}'></textarea>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-call">Gọi ngay</button>
+    <div id="result-box"></div>
+  </div>
+</div>
+
+<!-- ========== TAB: CHIẾN DỊCH ========== -->
+<div class="panel" id="panel-campaign">
+  <div class="card">
+    <h2>Tạo chiến dịch</h2>
+    <div class="form-row">
+      <div>
+        <label>Kịch bản</label>
+        <input type="text" id="c-scenario" value="leadgenTNDS">
+      </div>
+      <div>
+        <label>Caller ID</label>
+        <input type="text" id="c-caller" placeholder="callbot">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>CCU (số cuộc đồng thời)</label>
+        <input type="number" id="c-ccu" value="3" min="1" max="50">
+      </div>
+      <div></div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <label>File CSV (cột phone bắt buộc)</label>
+        <div class="file-drop" id="file-drop">
+          <div>Kéo thả file CSV vào đây hoặc click để chọn</div>
+          <div class="filename" id="file-name"></div>
+          <input type="file" id="c-file" accept=".csv">
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-campaign">Bắt đầu chiến dịch</button>
+  </div>
+
+  <div class="card" id="camp-detail" style="display:none">
+    <h2>Chi tiết chiến dịch: <span id="cd-id"></span></h2>
+    <div class="stats-grid" id="cd-stats"></div>
+    <div style="max-height:400px;overflow:auto">
+      <table>
+        <thead><tr><th>#</th><th>SĐT</th><th>Tên</th><th>Trạng thái</th><th>UUID</th><th>Lỗi</th></tr></thead>
+        <tbody id="cd-leads"></tbody>
+      </table>
+    </div>
+    <button class="btn btn-outline" id="btn-refresh-detail" style="margin-top:12px">Refresh</button>
+  </div>
+</div>
+
+<!-- ========== TAB: DASHBOARD ========== -->
+<div class="panel" id="panel-dashboard">
+  <div class="card">
+    <h2>Danh sách chiến dịch</h2>
+    <div id="dash-list"><div class="empty-state">Chưa có chiến dịch nào</div></div>
+    <button class="btn btn-outline" id="btn-refresh-dash" style="margin-top:12px">Refresh</button>
+  </div>
+</div>
+</div>
+
+<script>
+const API = window.location.origin;
+
+// --- Tabs ---
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'dashboard') loadDashboard();
+  });
+});
+
+// --- Toast ---
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// --- Load TTS Voices ---
+(async function loadVoices() {
+  const sel = document.getElementById('s-voice');
+  try {
+    const res = await fetch(API + '/api/voices');
+    const data = await res.json();
+    const voices = (data.voices || []).filter(v => v.tts_version === 'v3');
+    sel.innerHTML = '<option value="">Mặc định (phuongnhi-north)</option>';
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.id;
+      if (v.id === 'phuongnhi-north') opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    sel.innerHTML = '<option value="">Không tải được danh sách giọng</option>';
+  }
+})();
+
+// --- Single Call ---
+document.getElementById('btn-call').addEventListener('click', async () => {
+  const phone = document.getElementById('s-phone').value.trim();
+  if (!phone) return toast('Nhập số điện thoại', 'error');
+
+  let customData = {};
+  const customRaw = document.getElementById('s-custom').value.trim();
+  if (customRaw) {
+    try { customData = JSON.parse(customRaw); }
+    catch { return toast('Custom Data JSON không hợp lệ', 'error'); }
+  }
+
+  const body = {
+    phone,
+    sip_endpoint: document.getElementById('s-sip').value.trim(),
+    caller_id: document.getElementById('s-caller').value.trim(),
+    scenario: document.getElementById('s-scenario').value.trim(),
+    lead_id: document.getElementById('s-leadid').value.trim(),
+    voice_id: document.getElementById('s-voice').value,
+    gender: customData.gender || '',
+    name: customData.name || '',
+    plate: customData.plate || '',
+    custom_data: customData,
+  };
+
+  const btn = document.getElementById('btn-call');
+  btn.disabled = true;
+  btn.textContent = 'Đang gọi...';
+
+  try {
+    const res = await fetch(API + '/api/call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    const box = document.getElementById('result-box');
+    box.style.display = 'block';
+    box.textContent = JSON.stringify(data, null, 2);
+    if (res.ok) toast('Cuộc gọi đã được tạo');
+    else toast(data.error || 'Lỗi', 'error');
+  } catch (e) {
+    toast('Kết nối thất bại: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gọi ngay';
+  }
+});
+
+// --- File Drop ---
+const fileDrop = document.getElementById('file-drop');
+const fileInput = document.getElementById('c-file');
+const fileName = document.getElementById('file-name');
+
+['dragenter','dragover'].forEach(e => fileDrop.addEventListener(e, ev => { ev.preventDefault(); fileDrop.classList.add('dragover'); }));
+['dragleave','drop'].forEach(e => fileDrop.addEventListener(e, ev => { ev.preventDefault(); fileDrop.classList.remove('dragover'); }));
+fileDrop.addEventListener('drop', ev => { fileInput.files = ev.dataTransfer.files; showFileName(); });
+fileInput.addEventListener('change', showFileName);
+function showFileName() {
+  if (fileInput.files.length) fileName.textContent = fileInput.files[0].name;
+}
+
+// --- Campaign Create ---
+document.getElementById('btn-campaign').addEventListener('click', async () => {
+  const file = fileInput.files[0];
+  if (!file) return toast('Chọn file CSV', 'error');
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('scenario', document.getElementById('c-scenario').value.trim());
+  fd.append('caller_id', document.getElementById('c-caller').value.trim());
+  fd.append('ccu', document.getElementById('c-ccu').value.trim());
+
+  const btn = document.getElementById('btn-campaign');
+  btn.disabled = true;
+  btn.textContent = 'Đang tạo...';
+
+  try {
+    const res = await fetch(API + '/api/campaign', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      toast(`Chiến dịch ${data.campaign_id} đã tạo (${data.total_leads} leads)`);
+      loadCampaignDetail(data.campaign_id);
+    } else {
+      toast(data.error || 'Lỗi', 'error');
+    }
+  } catch (e) {
+    toast('Kết nối thất bại: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Bắt đầu chiến dịch';
+  }
+});
+
+// --- Campaign Detail ---
+let currentCampId = null;
+
+async function loadCampaignDetail(id) {
+  currentCampId = id;
+  try {
+    const res = await fetch(API + '/api/campaign?id=' + id);
+    const data = await res.json();
+
+    document.getElementById('cd-id').textContent = data.id + ' (' + data.status + ')';
+    document.getElementById('camp-detail').style.display = 'block';
+
+    const s = data.stats;
+    document.getElementById('cd-stats').innerHTML = `
+      <div class="stat-card"><div class="num">${s.total}</div><div class="lbl">Tổng</div></div>
+      <div class="stat-card blue"><div class="num">${s.dialing}</div><div class="lbl">Đang gọi</div></div>
+      <div class="stat-card green"><div class="num">${s.completed}</div><div class="lbl">Hoàn thành</div></div>
+      <div class="stat-card red"><div class="num">${s.failed}</div><div class="lbl">Thất bại</div></div>
+      <div class="stat-card yellow"><div class="num">${s.pending}</div><div class="lbl">Chờ</div></div>
+    `;
+
+    const tbody = document.getElementById('cd-leads');
+    tbody.innerHTML = (data.leads || []).map((l, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${l.phone}</td>
+        <td>${l.name || '-'}</td>
+        <td><span class="badge badge-${l.status}">${l.status}</span></td>
+        <td style="font-size:11px">${l.call_uuid || '-'}</td>
+        <td style="color:var(--red);font-size:12px">${l.error || ''}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    toast('Lỗi tải chi tiết: ' + e.message, 'error');
+  }
+}
+
+document.getElementById('btn-refresh-detail').addEventListener('click', () => {
+  if (currentCampId) loadCampaignDetail(currentCampId);
+});
+
+// --- Dashboard ---
+async function loadDashboard() {
+  try {
+    const res = await fetch(API + '/api/campaign');
+    const list = await res.json();
+    const el = document.getElementById('dash-list');
+
+    if (!list || !list.length) {
+      el.innerHTML = '<div class="empty-state">Chưa có chiến dịch nào</div>';
+      return;
+    }
+
+    el.innerHTML = list.map(c => {
+      const s = c.stats;
+      const pct = s.total ? Math.round(((s.completed + s.failed) / s.total) * 100) : 0;
+      return `
+        <div class="camp-list-item" onclick="viewCampaign('${c.id}')">
+          <div>
+            <strong>${c.id}</strong>
+            <span style="color:var(--text2);margin-left:8px">${c.scenario}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:13px;color:var(--text2)">${s.completed}/${s.total} (${pct}%)</span>
+            <span class="badge badge-${c.status}">${c.status}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    toast('Lỗi tải dashboard: ' + e.message, 'error');
+  }
+}
+
+function viewCampaign(id) {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab')[1].classList.add('active');
+  document.getElementById('panel-campaign').classList.add('active');
+  loadCampaignDetail(id);
+}
+
+document.getElementById('btn-refresh-dash').addEventListener('click', loadDashboard);
+
+// Auto-refresh campaign detail every 3s if viewing
+setInterval(() => {
+  if (currentCampId && document.getElementById('camp-detail').style.display !== 'none') {
+    loadCampaignDetail(currentCampId);
+  }
+}, 3000);
+</script>
+</body>
+</html>

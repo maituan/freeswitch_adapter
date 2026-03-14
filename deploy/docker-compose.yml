@@ -1,0 +1,131 @@
+services:
+
+  # Next.js web UI + API routes — port 3000
+  callbot-agents:
+    build:
+      context: ../callbot-realtime-agents-main
+      dockerfile: Dockerfile
+    image: callbot-realtime-agents:latest
+    container_name: callbot-agents
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEXT_PUBLIC_OPENAI_MODEL=${NEXT_PUBLIC_OPENAI_MODEL:-gpt-4o-mini-realtime-preview}
+      - BRIDGE_URL=http://101.99.3.216:8083
+    command: ["npm", "run", "start"]
+
+  # Viettel ASR gRPC → WebSocket proxy — port 8082
+  callbot-asr-proxy:
+    build:
+      context: ../callbot-realtime-agents-main
+      dockerfile: Dockerfile
+    image: callbot-realtime-agents:latest
+    container_name: callbot-asr-proxy
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - ASR_TOKEN=${ASR_TOKEN}
+      - ASR_GRPC_URI=${ASR_GRPC_URI:-103.253.20.28:9000}
+      - ASR_PROXY_PORT=8086
+    command: ["npm", "run", "asr-proxy"]
+
+  # WebSocket relay server — receives audio from Go bridge, calls OpenAI + TTS — port 8091
+  callbot-relay:
+    build:
+      context: ../callbot-realtime-agents-main
+      dockerfile: Dockerfile
+    image: callbot-realtime-agents:latest
+    container_name: callbot-relay
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini-realtime-preview}
+      - RELAY_PORT=8091
+      - RELAY_API_KEY=${RELAY_API_KEY:-}
+      - BASE_URL=http://localhost:3000
+      - ASR_PROXY_URL=ws://localhost:8086
+      - TTS_WEBSOCKET_URI=${TTS_WEBSOCKET_URI:-ws://103.253.20.27:8765}
+    command: ["npm", "run", "relay"]
+    depends_on:
+      - callbot-agents
+      - callbot-asr-proxy
+
+  # Postgres cho lịch sử cuộc gọi / console
+  callbot-postgres:
+    image: postgres:16
+    container_name: callbot-postgres
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-callbot}
+      - POSTGRES_USER=${POSTGRES_USER:-callbot}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-callbot}
+    volumes:
+      - callbot-postgres-data:/var/lib/postgresql/data
+
+  # Kafka single-node cho call history (KRaft mode)
+  callbot-kafka:
+    image: apache/kafka:latest
+    container_name: callbot-kafka
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    volumes:
+      - callbot-kafka-data:/var/lib/kafka/data
+
+  # CallBot Console - UI quản lý gọi lẻ, chiến dịch, lịch sử
+  callbot-console:
+    build:
+      context: ../callbot-console
+      dockerfile: Dockerfile
+    image: callbot-console:latest
+    container_name: callbot-console
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PORT=${CALLBOT_CONSOLE_PORT:-3100}
+      - BRIDGE_URL=http://101.99.3.216:8083
+      - DATABASE_URL=${DATABASE_URL:-postgres://callbot:callbot@localhost:5432/callbot}
+      - KAFKA_BROKERS=localhost:9092
+      - KAFKA_CALL_HISTORY_TOPIC=call_history
+      - KAFKA_CLIENT_ID=callbot-console
+    command: ["npm", "run", "start"]
+    depends_on:
+      - callbot-postgres
+      - callbot-kafka
+
+  # Kafka consumer cho call-history (có thể tách nếu muốn)
+  callbot-console-consumer:
+    build:
+      context: ../callbot-console
+      dockerfile: Dockerfile
+    image: callbot-console:latest
+    container_name: callbot-console-consumer
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://callbot:callbot@localhost:5432/callbot}
+      - KAFKA_BROKERS=localhost:9092
+      - KAFKA_CALL_HISTORY_TOPIC=call_history
+      - KAFKA_CLIENT_ID=callbot-console
+    command: ["npm", "run", "kafka:consumer"]
+    depends_on:
+      - callbot-postgres
+      - callbot-kafka
+
+volumes:
+  callbot-postgres-data:
+  callbot-kafka-data:

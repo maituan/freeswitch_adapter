@@ -1,0 +1,47 @@
+{
+  "name": "realtime-examples",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node ./node_modules/concurrently/dist/bin/concurrently.js \"node ./node_modules/next/dist/bin/next dev\" \"node ./node_modules/tsx/dist/cli.mjs src/scripts/asr-proxy.ts\"",
+    "build": "node ./node_modules/next/dist/bin/next build",
+    "start": "node ./node_modules/next/dist/bin/next start",
+    "lint": "node ./node_modules/next/dist/bin/next lint",
+    "asr-proxy": "node ./node_modules/tsx/dist/cli.mjs src/scripts/asr-proxy.ts",
+    "relay": "node ./node_modules/tsx/dist/cli.mjs --tsconfig relay-server/tsconfig.server.json relay-server/server.ts",
+    "abic:build-spoken-index": "node scripts/build-abic-travel-spoken-index.mjs"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.1",
+    "@grpc/proto-loader": "^0.8.0",
+    "@openai/agents": "^0.0.5",
+    "@radix-ui/react-icons": "^1.3.2",
+    "bufferutil": "^4.0.9",
+    "dotenv": "^16.4.7",
+    "next": "^15.3.1",
+    "openai": "^4.77.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.3",
+    "redis": "^5.10.0",
+    "kafkajs": "^2.2.4",
+    "utf-8-validate": "^6.0.5",
+    "uuid": "^11.0.4",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.5.10",
+    "concurrently": "^9.2.1",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.4",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}

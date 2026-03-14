@@ -1,0 +1,32 @@
+# --- Binaries ---
+# Loại bỏ toàn bộ file trong thư mục bin
+bin/
+# Nếu bạn build trực tiếp ở thư mục gốc
+voicebot
+*.exe
+*.bin
+
+# --- Configurations ---
+# Loại bỏ file config thực tế (vì chứa mật khẩu, ip, token)
+config/
+config.yaml
+# Loại bỏ các file môi trường
+.env
+
+# --- Logs ---
+# Loại bỏ các file log phát sinh
+*.log
+logs/
+
+# --- Go Specific ---
+# Các file phụ của Go
+vendor/
+obj/
+# Nếu dùng công cụ coverage
+*.out
+*.test
+
+# --- OS Specific ---
+.DS_Store
+.idea/
+.vscode/

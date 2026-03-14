@@ -1,0 +1,2121 @@
+<!DOCTYPE html>
+<!-- saved from url=(0040)https://note.vtvcab.vn/ai/index_asr.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style>body {transition: opacity ease-in 0.2s; } 
+body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } 
+</style>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASR Streaming Demo</title>
+    <link href="./ASR Streaming Demo_files/css2" rel="stylesheet">
+    <link rel="stylesheet" href="./ASR Streaming Demo_files/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --danger-color: #f72585;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --gray-color: #6c757d;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: var(--dark-color);
+            line-height: 1.6;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            padding: 12px;
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+        }
+        
+        .status-icon {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        
+        .status-connected {
+            background-color: rgba(76, 201, 240, 0.2);
+            color: var(--success-color);
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .status-disconnected {
+            background-color: rgba(247, 37, 133, 0.1);
+            color: var(--danger-color);
+            border-left: 4px solid var(--danger-color);
+        }
+        
+        .controls {
+            margin: 25px 0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 150px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        #recordButton {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        #recordButton.recording {
+            background-color: var(--danger-color);
+        }
+        
+        #playButton {
+            background-color: var(--secondary-color);
+            color: white;
+            display: none;
+        }
+        
+        .visualizer-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        .visualizer {
+            width: 100%;
+            height: 80px;
+            background-color: rgba(67, 97, 238, 0.05);
+            border-radius: var(--border-radius);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            padding: 0 2px;
+        }
+        
+        .visualizer-bar {
+            background-color: var(--primary-color);
+            width: 4px;
+            margin: 0 1px;
+            border-radius: 2px 2px 0 0;
+            transition: height 0.1s ease;
+        }
+        
+        .visualizer-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            font-size: 14px;
+            color: var(--gray-color);
+            display: flex;
+            align-items: center;
+        }
+        
+        .recording-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--danger-color);
+            margin-left: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        
+        .transcription-container {
+            margin-top: 30px;
+        }
+        
+        .transcription-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: var(--primary-color);
+            justify-content: space-between;
+        }
+        
+        .transcription-icon {
+            margin-right: 10px;
+        }
+        
+        .transcription-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .scroll-toggle {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            color: var(--gray-color);
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: var(--primary-color);
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+        
+        #transcription {
+            padding: 20px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: var(--border-radius);
+            height: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #fff;
+            font-size: 16px;
+            line-height: 1.6;
+            transition: var(--transition);
+            scroll-behavior: smooth;
+        }
+        
+        #transcription:empty::before {
+            content: "Your transcription will appear here...";
+            color: var(--gray-color);
+            font-style: italic;
+        }
+        
+        .transcript-line {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .transcript-line:last-child {
+            border-bottom: none;
+        }
+        
+        .transcript-line.incomplete {
+            color: var(--gray-color);
+            filter: blur(0.3px);
+            font-weight: 300;
+        }
+        
+        .transcript-line.complete {
+            color: var(--dark-color);
+            font-weight: 500;
+        }
+        
+        .transcript-line-time {
+            font-size: 12px;
+            color: var(--gray-color);
+            margin-top: 4px;
+            display: block;
+        }
+        
+        .audio-container {
+            margin-top: 30px;
+            display: none;
+            transition: var(--transition);
+        }
+        
+        .audio-container.visible {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .audio-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: var(--secondary-color);
+        }
+        
+        .audio-icon {
+            margin-right: 10px;
+        }
+        
+        audio {
+            width: 100%;
+            border-radius: var(--border-radius);
+            margin-top: 10px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: var(--gray-color);
+        }
+        
+        .file-upload-container {
+            margin: 25px 0;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            background-color: white;
+            box-shadow: var(--box-shadow);
+        }
+        
+        .file-upload-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: var(--primary-color);
+        }
+        
+        .file-icon {
+            margin-right: 10px;
+        }
+        
+        .file-upload-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .file-upload-button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+        
+        .file-upload-button:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+        }
+        
+        #fileNameDisplay {
+            color: var(--gray-color);
+            font-style: italic;
+        }
+        
+        .file-progress-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        #fileProgress {
+            flex-grow: 1;
+            height: 10px;
+            border-radius: 5px;
+        }
+        
+        #fileProgress::-webkit-progress-bar {
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        
+        #fileProgress::-webkit-progress-value {
+            background-color: var(--primary-color);
+            border-radius: 5px;
+        }
+        
+        #fileProgressText {
+            min-width: 40px;
+            text-align: right;
+            color: var(--gray-color);
+        }
+        
+        .file-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .file-buttons button {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        #startFileButton {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        #stopFileButton {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        #resetFileButton {
+            background-color: var(--gray-color);
+            color: white;
+        }
+        
+        .mode-toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+            padding: 10px;
+            background-color: rgba(67, 97, 238, 0.05);
+            border-radius: var(--border-radius);
+        }
+        
+        .mode-toggle {
+            margin: 0 5px;
+        }
+        
+        #modeLabel {
+            font-size: 14px;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+    </style>
+<style>
+                .file-upload-container {
+                    margin: 25px 0;
+                    padding: 20px;
+                    border-radius: var(--border-radius);
+                    background-color: white;
+                    box-shadow: var(--box-shadow);
+                }
+                
+                .file-upload-header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 15px;
+                    font-size: 18px;
+                    color: var(--primary-color);
+                }
+                
+                .file-icon {
+                    margin-right: 10px;
+                }
+                
+                .file-upload-controls {
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                }
+                
+                .file-upload-button {
+                    padding: 10px 20px;
+                    background-color: var(--primary-color);
+                    color: white;
+                    border-radius: var(--border-radius);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    transition: var(--transition);
+                }
+                
+                .file-upload-button:hover {
+                    background-color: var(--secondary-color);
+                    transform: translateY(-2px);
+                }
+                
+                #fileNameDisplay {
+                    color: var(--gray-color);
+                    font-style: italic;
+                }
+                
+                .file-progress-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 15px;
+                }
+                
+                #fileProgress {
+                    flex-grow: 1;
+                    height: 10px;
+                    border-radius: 5px;
+                }
+                
+                #fileProgress::-webkit-progress-bar {
+                    background-color: #f0f0f0;
+                    border-radius: 5px;
+                }
+                
+                #fileProgress::-webkit-progress-value {
+                    background-color: var(--primary-color);
+                    border-radius: 5px;
+                }
+                
+                #fileProgressText {
+                    min-width: 40px;
+                    text-align: right;
+                    color: var(--gray-color);
+                }
+                
+                .file-buttons {
+                    display: flex;
+                    gap: 10px;
+                }
+                
+                .file-buttons button {
+                    flex: 1;
+                    min-width: 0;
+                }
+                
+                #startFileButton {
+                    background-color: var(--primary-color);
+                    color: white;
+                }
+                
+                #stopFileButton {
+                    background-color: var(--danger-color);
+                    color: white;
+                }
+                
+                #resetFileButton {
+                    background-color: var(--gray-color);
+                    color: white;
+                }
+            </style></head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-microphone"></i> Vietnamese ASR Demo</h1>
+        
+        <div id="status" class="status-bar status-disconnected">
+            <i class="fas fa-circle-exclamation status-icon"></i>
+            <span>Status: Offline Mode</span>
+        </div>
+
+        <div class="mode-toggle-container">
+            <span>Mode:</span>
+            <label class="toggle-switch mode-toggle">
+                <input type="checkbox" id="modeToggle">
+                <span class="toggle-slider"></span>
+            </label>
+            <span id="modeLabel">Offline (REST API)</span>
+        </div>
+
+        <div class="controls">
+            <button id="recordButton">
+                <i class="fas fa-microphone"></i>
+                <span>Start Recording</span>
+            </button>
+            <button id="playButton">
+                <i class="fas fa-play"></i>
+                <span>Play Recording</span>
+            </button>
+        </div>
+
+        <div class="visualizer-container">
+            <div class="visualizer-label">
+                <span>Audio Level</span>
+                <span id="recordingIndicator"></span>
+            </div>
+            <div class="visualizer" id="visualizer">
+                <!-- Visualizer bars will be added here dynamically -->
+            <div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div><div class="visualizer-bar" style="height: 0px;"></div></div>
+        </div><div class="file-upload-container">
+                <div class="file-upload-header">
+                    <i class="fas fa-file-audio file-icon"></i>
+                    <span>Upload Audio File</span>
+                </div>
+                <div class="file-upload-controls">
+                    <label for="audioFileInput" class="file-upload-button">
+                        <i class="fas fa-upload"></i>
+                        <span>Choose File</span>
+                    </label>
+                    <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
+                    <span id="fileNameDisplay">No file selected</span>
+                </div>
+                <div id="fileControls" style="display: none; margin-top: 15px;">
+                    <div class="file-progress-container">
+                        <progress id="fileProgress" value="0" max="100"></progress>
+                        <span id="fileProgressText">0%</span>
+                    </div>
+                    <div class="file-buttons">
+                        <button id="startFileButton">
+                            <i class="fas fa-play"></i>
+                            <span>Start Streaming</span>
+                        </button>
+                        <button id="stopFileButton">
+                            <i class="fas fa-stop"></i>
+                            <span>Stop</span>
+                        </button>
+                        <button id="resetFileButton">
+                            <i class="fas fa-undo"></i>
+                            <span>Reset</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        <div class="transcription-container">
+            <div class="transcription-header">
+                <div class="header-title">
+                    <i class="fas fa-file-lines transcription-icon"></i>
+                    <span>Transcription</span>
+                </div>
+                <div class="transcription-controls">
+                    <div class="scroll-toggle">
+                        <span>Auto-scroll</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoScrollToggle" checked="">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <button id="clearTranscriptButton" style="min-width: auto; padding: 5px 10px;">
+                        <i class="fas fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="transcription"></div>
+        </div>
+
+        <div class="audio-container" id="audioContainer" style="display: none;">
+            <div class="audio-header">
+                <i class="fas fa-headphones audio-icon"></i>
+                <span>Recorded Audio</span>
+            </div>
+            <audio id="audioPlayer" controls=""></audio>
+        </div>
+        
+        <div class="footer">
+            <p>© 2025  MagicVoicePro </p>
+        </div>
+    </div>
+
+    <script>
+        class ASRClient {
+            constructor(serverUrl = 'wss://socketasr.magicvoice.vn') {
+                this.serverUrl = serverUrl;
+                this.restApiUrl = 'https://restasr.magicvoice.vn/api/v1/asr/audio';
+                this.apiToken = 'ZHLIjJDZLbKZxN6TlMB411ae9N6q87G8';
+                this.offlineMode = true; // Set offline mode as default
+                this.ws = null;
+                this.isConnected = false;
+                this.audioContext = null;
+                this.mediaStream = null;
+                this.processor = null;
+                this.recording = false;
+                this.transcriptionDiv = document.getElementById('transcription');
+                this.statusDiv = document.getElementById('status');
+                this.recordingIndicator = document.getElementById('recordingIndicator');
+                this.targetSampleRate = 16000;
+                this.chunkDuration = 0.2; // 0.2 seconds per chunk
+                this.chunkSize = this.targetSampleRate * this.chunkDuration; // samples per chunk
+                this.audioBuffer = new Float32Array(0);
+                this.audioChunks = [];
+                this.mediaRecorder = null;
+                this.visualizer = document.getElementById('visualizer');
+                this.analyser = null;
+                this.visualizerBars = [];
+                this.createVisualizer();
+                
+                // File streaming properties
+                this.fileMode = false;
+                this.fileAudioBuffer = null;
+                this.filePlaybackPosition = 0;
+                this.filePlaybackInterval = null;
+                
+                // Add debug mode
+                this.debug = true;
+            }
+
+            createVisualizer() {
+                // Create visualizer bars
+                const barCount = 50;
+                for (let i = 0; i < barCount; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'visualizer-bar';
+                    bar.style.height = '0px';
+                    this.visualizer.appendChild(bar);
+                    this.visualizerBars.push(bar);
+                }
+            }
+
+            updateVisualizer() {
+                if (!this.analyser) return;
+                
+                const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                this.analyser.getByteFrequencyData(dataArray);
+                
+                const step = Math.floor(dataArray.length / this.visualizerBars.length);
+                
+                for (let i = 0; i < this.visualizerBars.length; i++) {
+                    const value = dataArray[i * step];
+                    const height = (value / 255) * 80;
+                    this.visualizerBars[i].style.height = `${height}px`;
+                }
+                
+                if (this.recording) {
+                    requestAnimationFrame(() => this.updateVisualizer());
+                } else {
+                    // Reset visualizer when not recording
+                    this.visualizerBars.forEach(bar => {
+                        bar.style.height = '0px';
+                    });
+                }
+            }
+
+            async connect() {
+                try {
+                    console.log('Connecting to WebSocket server:', this.serverUrl);
+                    this.ws = new WebSocket(this.serverUrl);
+                    
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connection established');
+                        this.isConnected = true;
+                        this.updateStatus('Connected', true);
+                        // Send start signal
+                        this.ws.send(JSON.stringify({
+                            signal: 'start',
+                            nbest: 1,
+                            continuous_decoding: true
+                        }));
+                        console.log('Start signal sent');
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            // Log the raw message first
+                            console.log('Raw WebSocket message:', event.data);
+                            
+                            // Try to parse as JSON
+                            let response;
+                            try {
+                                response = JSON.parse(event.data);
+                                console.log('Parsed server response:', response);
+                            } catch (jsonError) {
+                                console.log('Message is not JSON, might be binary data or plain text');
+                                console.log('Message type:', typeof event.data);
+                                console.log('Message length:', event.data.length);
+                                // Still try to handle the message
+                                this.handleNonJsonMessage(event.data);
+                                return;
+                            }
+                            
+                            // Handle JSON response
+                            this.handleServerResponse(response);
+                        } catch (error) {
+                            console.error('Error handling WebSocket message:', error);
+                            console.error('Message data:', event.data);
+                        }
+                    };
+
+                    this.ws.onclose = (event) => {
+                        console.log('WebSocket connection closed:', event.code, event.reason);
+                        this.isConnected = false;
+                        this.updateStatus('Disconnected', false);
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateStatus('Connection error', false);
+                    };
+                } catch (error) {
+                    console.error('Connection failed:', error);
+                    this.updateStatus('Connection failed', false);
+                }
+            }
+
+            updateStatus(message, connected) {
+                const statusText = this.statusDiv.querySelector('span');
+                const statusIcon = this.statusDiv.querySelector('i');
+                
+                statusText.textContent = `Status: ${message}`;
+                this.statusDiv.className = connected ? 'status-bar status-connected' : 'status-bar status-disconnected';
+                
+                if (connected) {
+                    statusIcon.className = 'fas fa-circle-check status-icon';
+                } else {
+                    statusIcon.className = 'fas fa-circle-exclamation status-icon';
+                }
+                
+                if (this.recording) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'recording-indicator';
+                    this.recordingIndicator.innerHTML = '';
+                    this.recordingIndicator.appendChild(indicator);
+                } else {
+                    this.recordingIndicator.innerHTML = '';
+                }
+            }
+
+            handleServerResponse(response) {
+                if (this.debug) {
+                    console.log('Processing server response:', response);
+                }
+                
+                if (response.status === 'ok') {
+                    if (response.type === 'partial_result' || response.type === 'final_result') {
+                        try {
+                            // Check if nbest is a string that needs parsing or already an object
+                            let result;
+                            if (typeof response.nbest === 'string') {
+                                result = JSON.parse(response.nbest);
+                            } else if (Array.isArray(response.nbest)) {
+                                result = response.nbest;
+                            } else {
+                                console.error('Unexpected nbest format:', response.nbest);
+                                return;
+                            }
+                            
+                            if (result && result.length > 0) {
+                                // Handle different response formats
+                                let sentence = '';
+                                let isFinal = response.type === 'final_result';
+                                
+                                if (typeof result[0] === 'object' && 'sentence' in result[0]) {
+                                    sentence = result[0].sentence;
+                                    if ('speech_end' in result[0]) {
+                                        isFinal = isFinal || result[0].speech_end;
+                                    }
+                                } else if (typeof result[0] === 'string') {
+                                    sentence = result[0];
+                                } else {
+                                    console.log('Unexpected result format:', result[0]);
+                                    return;
+                                }
+                                
+                                if (this.debug) {
+                                    console.log(`Updating transcription: "${sentence}" (${isFinal ? 'final' : 'partial'})`);
+                                }
+                                
+                                // Only update if there's actual content
+                                if (sentence.trim()) {
+                                    this.updateTranscription(sentence, isFinal);
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error parsing response:', error, response);
+                        }
+                    } else if (response.type === 'server_ready') {
+                        console.log('Server is ready to receive audio');
+                    } else if (response.type === 'speech_end') {
+                        console.log('Speech end detected by server');
+                    }
+                } else if (response.status === 'error') {
+                    console.error('Server returned error:', response.message || response);
+                }
+            }
+            
+            updateTranscription(text, isFinal) {
+                console.log(`Updating transcription UI: "${text}" (${isFinal ? 'final' : 'partial'})`);
+                
+                if (!this.transcriptionDiv) {
+                    console.error('Transcription div not found');
+                    return;
+                }
+                
+                // Get or create the current line
+                let currentLine = this.transcriptionDiv.querySelector('.transcript-line:last-child');
+                
+                if (!currentLine || currentLine.classList.contains('complete')) {
+                    // Create a new line if there's no current line or the last one is complete
+                    currentLine = document.createElement('div');
+                    currentLine.className = 'transcript-line incomplete';
+                    
+                    // Add timestamp
+                    const timestamp = document.createElement('span');
+                    timestamp.className = 'transcript-line-time';
+                    const now = new Date();
+                    timestamp.textContent = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+                    
+                    // Create text content element
+                    const textContent = document.createElement('div');
+                    textContent.className = 'transcript-line-content';
+                    
+                    currentLine.appendChild(textContent);
+                    currentLine.appendChild(timestamp);
+                    this.transcriptionDiv.appendChild(currentLine);
+                }
+                
+                // Update the text content
+                const textContent = currentLine.querySelector('.transcript-line-content');
+                if (textContent) {
+                    textContent.textContent = text;
+                } else {
+                    console.error('Text content element not found in transcript line');
+                }
+                
+                // Mark as complete if final
+                if (isFinal) {
+                    currentLine.classList.remove('incomplete');
+                    currentLine.classList.add('complete');
+                }
+                
+                // Auto-scroll if enabled
+                const autoScrollToggle = document.getElementById('autoScrollToggle');
+                if (autoScrollToggle && autoScrollToggle.checked) {
+                    this.transcriptionDiv.scrollTop = this.transcriptionDiv.scrollHeight;
+                }
+            }
+
+            downsample(inputBuffer) {
+                const inputData = inputBuffer.getChannelData(0);
+                const originalSampleRate = this.audioContext.sampleRate;
+                const ratio = originalSampleRate / this.targetSampleRate;
+                const newLength = Math.round(inputData.length / ratio);
+                
+                let offsetSamples = 0;
+                const output = new Float32Array(newLength);
+                
+                for (let i = 0; i < output.length; i++) {
+                    const index = Math.floor(offsetSamples);
+                    output[i] = inputData[index];
+                    offsetSamples += ratio;
+                }
+                
+                // Concatenate with existing buffer
+                const newBuffer = new Float32Array(this.audioBuffer.length + output.length);
+                newBuffer.set(this.audioBuffer);
+                newBuffer.set(output, this.audioBuffer.length);
+                this.audioBuffer = newBuffer;
+                
+                // Process chunks if we have enough data
+                while (this.audioBuffer.length >= this.chunkSize) {
+                    // Extract chunk
+                    const chunk = this.audioBuffer.slice(0, this.chunkSize);
+                    // Remove processed chunk from buffer
+                    this.audioBuffer = this.audioBuffer.slice(this.chunkSize);
+                    
+                    // Convert to Int16Array and send
+                    const int16Data = new Int16Array(chunk.length);
+                    for (let i = 0; i < chunk.length; i++) {
+                        const s = Math.max(-1, Math.min(1, chunk[i]));
+                        int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    
+                    if (this.recording && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(int16Data.buffer);
+                    }
+                }
+                
+                return output;
+            }
+
+            async startRecording() {
+                
+                if (this.recording) {
+                    console.warn('Already recording');
+    
+                    return;
+                }
+                
+                try {
+                    console.log('Starting recording...');
+                    
+                    // Request microphone access
+                    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    if (this.offlineMode) {
+                        alert('Offline mode is enabled. Audio will be recorded and sent to REST API after stopping.');
+                        // For offline mode, use MediaRecorder to capture audio
+                        console.log('Starting recording in offline mode');
+                        this.audioChunks = [];
+                        
+                        // Use audio/wav MIME type if supported
+                        const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm';
+                        console.log('Using MIME type:', mimeType);
+                        
+                        this.mediaRecorder = new MediaRecorder(this.mediaStream, {
+                            mimeType: mimeType,
+                            audioBitsPerSecond: 128000
+                        });
+                        
+                        this.mediaRecorder.ondataavailable = (event) => {
+                            if (event.data.size > 0) {
+                                console.log('Received audio chunk:', event.data.size, 'bytes');
+                                this.audioChunks.push(event.data);
+                            }
+                        };
+                        
+                        this.mediaRecorder.start(100); // Collect data every 100ms
+                        this.recording = true;
+                        this.updateStatus('Recording (Offline Mode)', false);
+                        
+                        // Start visualizer animation
+                        this.setupVisualizerForOfflineRecording();
+                        this.updateVisualizer();
+                    } else {
+                        // Online mode - connect to server if not connected
+                        if (!this.isConnected) {
+                            await this.connect();
+                        }
+                        
+                        // Create audio context and processor
+                        this.audioContext = new AudioContext();
+                        const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+                        
+                        // Create analyzer for visualizer
+                        this.analyser = this.audioContext.createAnalyser();
+                        this.analyser.fftSize = 256;
+                        source.connect(this.analyser);
+                        
+                        // Create processor node
+                        this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+                        source.connect(this.processor);
+                        this.processor.connect(this.audioContext.destination);
+                        
+                        // Process audio data
+                        this.processor.onaudioprocess = (e) => {
+                            if (!this.recording) return;
+                            
+                            const inputData = e.inputBuffer.getChannelData(0);
+                            
+                            // Resample if needed
+                            if (this.audioContext.sampleRate !== this.targetSampleRate) {
+                                // Simple resampling by skipping/duplicating samples
+                                const ratio = this.targetSampleRate / this.audioContext.sampleRate;
+                                const newLength = Math.round(inputData.length * ratio);
+                                const resampledData = new Float32Array(newLength);
+                                
+                                for (let i = 0; i < newLength; i++) {
+                                    const index = Math.floor(i / ratio);
+                                    resampledData[i] = inputData[index];
+                                }
+                                
+                                // Convert to Int16Array and send
+                                const int16Data = new Int16Array(resampledData.length);
+                                for (let i = 0; i < resampledData.length; i++) {
+                                    const s = Math.max(-1, Math.min(1, resampledData[i]));
+                                    int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                                }
+                                
+                                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                    this.ws.send(int16Data.buffer);
+                                }
+                            } else {
+                                // No resampling needed
+                                const int16Data = new Int16Array(inputData.length);
+                                for (let i = 0; i < inputData.length; i++) {
+                                    const s = Math.max(-1, Math.min(1, inputData[i]));
+                                    int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                                }
+                                
+                                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                    this.ws.send(int16Data.buffer);
+                                }
+                            }
+                        };
+                        
+                        this.recording = true;
+                        this.updateStatus('Recording', true);
+                        this.updateVisualizer();
+                    }
+                } catch (error) {
+                    console.error('Error starting recording:', error);
+                    this.updateStatus('Recording failed: ' + error.message, false);
+                }
+            }
+
+            async stopRecording() {
+                this.recording = false;
+                
+                if (this.offlineMode) {
+                    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+                        console.log('Stopping media recorder in offline mode');
+                        
+                        // Create a promise that resolves when the mediaRecorder stops
+                        const recordingStopped = new Promise(resolve => {
+                            this.mediaRecorder.onstop = resolve;
+                        });
+                        
+                        this.mediaRecorder.stop();
+                        
+                        // Wait for the mediaRecorder to finish
+                        await recordingStopped;
+                        
+                        console.log('Media recorder stopped, processing audio chunks');
+                        console.log('Audio chunks:', this.audioChunks.length);
+                        
+                        try {
+                            // Create a proper WAV file from the recorded chunks
+                            const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                            console.log('Audio blob created:', audioBlob.size, 'bytes');
+                            
+                            // Convert to proper WAV format if needed
+                            const properWavBlob = await this.convertToWav(audioBlob);
+                            
+                            // Send to REST API
+                            await this.sendAudioToRestApi(properWavBlob);
+                            
+                            // Create audio URL for playback
+                            const audioUrl = URL.createObjectURL(properWavBlob);
+                            const audioPlayer = document.getElementById('audioPlayer');
+                            audioPlayer.src = audioUrl;
+                            
+                            // Show audio player
+                            document.getElementById('audioContainer').style.display = 'block';
+                            document.getElementById('playButton').style.display = 'block';
+                        } catch (error) {
+                            console.error('Error processing recorded audio:', error);
+                            this.updateStatus('Error processing recording', false);
+                        }
+                    }
+                    
+                    if (this.mediaStream) {
+                        this.mediaStream.getTracks().forEach(track => track.stop());
+                        this.mediaStream = null;
+                    }
+                    
+                    this.updateStatus('Recording stopped', false);
+                } else {
+                    // Existing online mode code for stopping recording
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ signal: 'end' }));
+                    }
+                    
+                    if (this.mediaStream) {
+                        this.mediaStream.getTracks().forEach(track => track.stop());
+                        this.mediaStream = null;
+                    }
+                    
+                    if (this.processor) {
+                        this.processor.disconnect();
+                        this.processor = null;
+                    }
+                    
+                    if (this.audioContext) {
+                        this.audioContext.close();
+                        this.audioContext = null;
+                    }
+                    
+                    this.updateStatus('Recording stopped', this.isConnected);
+                }
+            }
+
+            playRecording() {
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.play();
+            }
+
+            async processAudioFile(file) {
+                try {
+                    console.log('Processing audio file:', file.name);
+                    
+                    // Reset any existing recording
+                    if (this.recording) {
+                        await this.stopRecording();
+                        isRecording = false;
+                        recordButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Recording</span>';
+                        recordButton.classList.remove('recording');
+                    }
+                    
+                    // Connect to server if not connected and in online mode
+                    if (!this.offlineMode && !this.isConnected) {
+                        try {
+                            await this.connect();
+                        } catch (error) {
+                            console.error('Failed to connect to server:', error);
+                            this.updateStatus('Connection failed', false);
+                            return false;
+                        }
+                    }
+                    
+                    // Read the file
+                    console.log('Reading file data...');
+                    const arrayBuffer = await file.arrayBuffer();
+                    
+                    // Check if this is a WAV file and extract format information
+                    let audioFormat = null;
+                    if (file.name.toLowerCase().endsWith('.wav')) {
+                        audioFormat = this.parseWavHeader(arrayBuffer);
+                        console.log('WAV format detected:', audioFormat);
+                    }
+                    
+                    const audioContext = new AudioContext();
+                    
+                    // Decode the audio file
+                    console.log('Decoding audio data...');
+                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                    console.log('Audio decoded:', audioBuffer.duration, 'seconds,', audioBuffer.numberOfChannels, 'channels,', audioBuffer.sampleRate, 'Hz');
+                    
+                    // Convert to mono if needed
+                    const numberOfChannels = audioBuffer.numberOfChannels;
+                    const sampleRate = audioBuffer.sampleRate;
+                    const length = audioBuffer.length;
+                    
+                    console.log('Converting to mono...');
+                    // Create a mono buffer
+                    const monoData = new Float32Array(length);
+                    
+                    // If stereo, mix down to mono
+                    if (numberOfChannels === 2) {
+                        const left = audioBuffer.getChannelData(0);
+                        const right = audioBuffer.getChannelData(1);
+                        
+                        for (let i = 0; i < length; i++) {
+                            monoData[i] = (left[i] + right[i]) / 2;
+                        }
+                    } else {
+                        // Just copy the data if already mono
+                        monoData.set(audioBuffer.getChannelData(0));
+                    }
+                    
+                    // Resample to target sample rate if needed
+                    let resampledData;
+                    if (sampleRate !== this.targetSampleRate) {
+                        console.log(`Resampling from ${sampleRate}Hz to ${this.targetSampleRate}Hz...`);
+                        const ratio = this.targetSampleRate / sampleRate;
+                        const newLength = Math.round(length * ratio);
+                        resampledData = new Float32Array(newLength);
+                        
+                        let offsetSamples = 0;
+                        for (let i = 0; i < newLength; i++) {
+                            const index = Math.floor(offsetSamples);
+                            resampledData[i] = index < length ? monoData[index] : 0;
+                            offsetSamples += 1 / ratio;
+                        }
+                        console.log(`Resampled to ${newLength} samples (${newLength/this.targetSampleRate} seconds)`);
+                    } else {
+                        console.log('No resampling needed');
+                        resampledData = monoData;
+                    }
+                    
+                    // Apply some normalization to ensure good audio levels
+                    let maxAmplitude = 0;
+                    for (let i = 0; i < resampledData.length; i++) {
+                        maxAmplitude = Math.max(maxAmplitude, Math.abs(resampledData[i]));
+                    }
+                    
+                    // Only normalize if the max amplitude is too low
+                    if (maxAmplitude > 0 && maxAmplitude < 0.5) {
+                        const normalizationFactor = 0.8 / maxAmplitude; // Target 80% of max amplitude
+                        console.log(`Normalizing audio with factor ${normalizationFactor}`);
+                        for (let i = 0; i < resampledData.length; i++) {
+                            resampledData[i] *= normalizationFactor;
+                        }
+                    }
+                    
+                    // Store the processed audio buffer
+                    this.fileAudioBuffer = resampledData;
+                    this.filePlaybackPosition = 0;
+                    this.fileMode = true;
+                    
+                    // Update UI
+                    this.updateStatus('File loaded, ready to stream', this.isConnected);
+                    
+                    console.log('File processed successfully, ready to stream');
+                    return true;
+                } catch (error) {
+                    console.error('Error processing audio file:', error);
+                    this.updateStatus('Error processing file', false);
+                    return false;
+                }
+            }
+            
+            startFileStreaming() {
+                if (!this.fileAudioBuffer) {
+                    console.error('Cannot start file streaming: no file loaded');
+                    return false;
+                }
+                
+                // Clear transcription before starting new streaming
+                if (document.getElementById('clearTranscriptButton')) {
+                    document.getElementById('clearTranscriptButton').click();
+                }
+                
+                // Close any existing connection
+                if (this.ws) {
+                    console.log('Closing existing WebSocket connection');
+                    this.ws.close();
+                    this.isConnected = false;
+                }
+                
+                // Update UI to show connecting status
+                this.updateStatus('Connecting to server...', false);
+                
+                // Create a fresh connection
+                console.log('Creating fresh WebSocket connection for file streaming');
+                this.ws = new WebSocket(this.serverUrl);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connection established for file streaming');
+                    this.isConnected = true;
+                    this.updateStatus('Connected, starting stream', true);
+                    
+                    // Send start signal
+                    console.log('Sending start signal');
+                    this.ws.send(JSON.stringify({
+                        signal: 'start',
+                        nbest: 1,
+                        continuous_decoding: true
+                    }));
+                    
+                    // Begin streaming after a short delay
+                    setTimeout(() => {
+                        this.startFileStreamingProcess();
+                    }, 500);
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        // Log the raw message
+                        console.log('Raw WebSocket message:', event.data);
+                        
+                        // Try to parse as JSON
+                        let response;
+                        try {
+                            response = JSON.parse(event.data);
+                            console.log('Parsed server response:', response);
+                        } catch (jsonError) {
+                            console.log('Message is not JSON, might be binary data or plain text');
+                            console.log('Message type:', typeof event.data);
+                            console.log('Message length:', event.data.length);
+                            // Still try to handle the message
+                            this.handleNonJsonMessage(event.data);
+                            return;
+                        }
+                        
+                        // Handle JSON response
+                        this.handleServerResponse(response);
+                    } catch (error) {
+                        console.error('Error handling WebSocket message:', error);
+                        console.error('Message data:', event.data);
+                    }
+                };
+                
+                this.ws.onclose = (event) => {
+                    console.log('WebSocket connection closed:', event.code, event.reason);
+                    this.isConnected = false;
+                    
+                    if (this.recording) {
+                        this.updateStatus('Connection lost during streaming', false);
+                        this.stopFileStreaming();
+                    } else {
+                        this.updateStatus('Disconnected', false);
+                    }
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateStatus('Connection error', false);
+                };
+                
+                return true;
+            }
+            
+            startFileStreamingProcess() {
+                console.log('Starting to stream file audio data');
+                
+                this.recording = true;
+                this.fileMode = true;
+                this.updateStatus('Streaming file', true);
+                
+                // Clear any existing interval
+                if (this.filePlaybackInterval) {
+                    clearInterval(this.filePlaybackInterval);
+                }
+                
+                // Create an audio context for playback
+                const audioContext = new AudioContext();
+                const playbackBuffer = audioContext.createBuffer(1, this.fileAudioBuffer.length, this.targetSampleRate);
+                const playbackChannel = playbackBuffer.getChannelData(0);
+                
+                // Copy the file audio data to the playback buffer
+                for (let i = 0; i < this.fileAudioBuffer.length; i++) {
+                    playbackChannel[i] = this.fileAudioBuffer[i];
+                }
+                
+                // Create a source node for playback
+                const source = audioContext.createBufferSource();
+                source.buffer = playbackBuffer;
+                source.connect(audioContext.destination);
+                
+                // Start playback
+                console.log('Starting audio playback');
+                source.start();
+                
+                // Calculate chunk size in samples (0.2 seconds of audio at target sample rate)
+                const chunkSizeInSamples = Math.floor(this.targetSampleRate * this.chunkDuration);
+                console.log(`Chunk size: ${chunkSizeInSamples} samples (${this.chunkDuration} seconds)`);
+                
+                // Start streaming chunks at regular intervals
+                this.filePlaybackInterval = setInterval(() => {
+                    if (this.filePlaybackPosition >= this.fileAudioBuffer.length) {
+                        // End of file reached
+                        console.log('End of file reached, stopping streaming');
+                        this.stopFileStreaming();
+                        return;
+                    }
+                    
+                    // Get the next chunk
+                    const endPos = Math.min(this.filePlaybackPosition + chunkSizeInSamples, this.fileAudioBuffer.length);
+                    const chunk = this.fileAudioBuffer.slice(this.filePlaybackPosition, endPos);
+                    this.filePlaybackPosition = endPos;
+                    
+                    // Convert to Int16Array and send
+                    const int16Data = new Int16Array(chunk.length);
+                    for (let i = 0; i < chunk.length; i++) {
+                        const s = Math.max(-1, Math.min(1, chunk[i]));
+                        int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        console.log(`Sending chunk: ${this.filePlaybackPosition}/${this.fileAudioBuffer.length} bytes (${Math.round(this.filePlaybackPosition/this.fileAudioBuffer.length*100)}%)`);
+                        
+                        // Send the binary data directly
+                        this.ws.send(int16Data.buffer);
+                        
+                        // Update progress
+                        const progress = (this.filePlaybackPosition / this.fileAudioBuffer.length) * 100;
+                        document.getElementById('fileProgress').value = progress;
+                        document.getElementById('fileProgressText').textContent = `${Math.round(progress)}%`;
+                    } else {
+                        console.error('WebSocket not open, cannot send data');
+                        this.stopFileStreaming();
+                    }
+                }, this.chunkDuration * 1000); // Convert seconds to milliseconds
+            }
+            
+            stopFileStreaming() {
+                console.log('Stopping file streaming');
+                
+                if (this.filePlaybackInterval) {
+                    clearInterval(this.filePlaybackInterval);
+                    this.filePlaybackInterval = null;
+                }
+                
+                // Stop any ongoing audio playback
+                if (this.audioContext) {
+                    this.audioContext.close().then(() => {
+                        console.log('Audio context closed');
+                        this.audioContext = null;
+                    }).catch(error => {
+                        console.error('Error closing audio context:', error);
+                    });
+                }
+                
+                this.recording = false;
+                this.fileMode = false;
+                
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    console.log('Sending end signal');
+                    this.ws.send(JSON.stringify({ signal: 'end' }));
+                    console.log('End signal sent');
+                }
+                
+                this.updateStatus('File streaming stopped', this.isConnected);
+                
+                return true;
+            }
+            
+            resetFileStreaming() {
+                this.filePlaybackPosition = 0;
+                document.getElementById('fileProgress').value = 0;
+                document.getElementById('fileProgressText').textContent = '0%';
+            }
+
+            // Add a method to handle non-JSON messages
+            handleNonJsonMessage(data) {
+                console.log('Handling non-JSON message');
+                // Try to interpret as text if it's a string
+                if (typeof data === 'string') {
+                    console.log('Text message content:', data);
+                    // Check if it contains any recognizable transcription
+                    if (data.includes('text') || data.includes('transcript') || data.includes('result')) {
+                        // Try to extract text between quotes
+                        const matches = data.match(/"([^"]+)"/g);
+                        if (matches && matches.length > 0) {
+                            const possibleTranscript = matches[0].replace(/"/g, '');
+                            console.log('Possible transcript found:', possibleTranscript);
+                            this.updateTranscription(possibleTranscript, false);
+                        }
+                    }
+                }
+            }
+
+            // Add a method to parse WAV headers
+            parseWavHeader(arrayBuffer) {
+                const dataView = new DataView(arrayBuffer);
+                
+                // Check RIFF header
+                const riff = String.fromCharCode(
+                    dataView.getUint8(0),
+                    dataView.getUint8(1),
+                    dataView.getUint8(2),
+                    dataView.getUint8(3)
+                );
+                
+                if (riff !== 'RIFF') {
+                    console.warn('Not a valid WAV file (RIFF header not found)');
+                    return null;
+                }
+                
+                // Check WAVE format
+                const wave = String.fromCharCode(
+                    dataView.getUint8(8),
+                    dataView.getUint8(9),
+                    dataView.getUint8(10),
+                    dataView.getUint8(11)
+                );
+                
+                if (wave !== 'WAVE') {
+                    console.warn('Not a valid WAV file (WAVE format not found)');
+                    return null;
+                }
+                
+                // Find the format chunk
+                let offset = 12;
+                let format = null;
+                
+                while (offset < dataView.byteLength) {
+                    const chunkType = String.fromCharCode(
+                        dataView.getUint8(offset),
+                        dataView.getUint8(offset + 1),
+                        dataView.getUint8(offset + 2),
+                        dataView.getUint8(offset + 3)
+                    );
+                    
+                    const chunkSize = dataView.getUint32(offset + 4, true);
+                    
+                    if (chunkType === 'fmt ') {
+                        const audioFormat = dataView.getUint16(offset + 8, true);
+                        const numChannels = dataView.getUint16(offset + 10, true);
+                        const sampleRate = dataView.getUint32(offset + 12, true);
+                        const byteRate = dataView.getUint32(offset + 16, true);
+                        const blockAlign = dataView.getUint16(offset + 20, true);
+                        const bitsPerSample = dataView.getUint16(offset + 22, true);
+                        
+                        format = {
+                            audioFormat,
+                            numChannels,
+                            sampleRate,
+                            byteRate,
+                            blockAlign,
+                            bitsPerSample
+                        };
+                        
+                        break;
+                    }
+                    
+                    offset += 8 + chunkSize;
+                }
+                
+                return format;
+            }
+
+            // Add a method to toggle between online and offline modes
+            toggleMode(isOffline) {
+                this.offlineMode = isOffline;
+                console.log(`Switched to ${isOffline ? 'offline' : 'online'} mode`);
+                
+                // Update status message
+                this.updateStatus(isOffline ? 'Offline Mode' : 'Online Mode', !isOffline);
+                
+                // Update file controls
+                const fileControls = document.getElementById('fileControls');
+                
+                if (fileControls) {
+                    fileControls.style.display = isOffline ? 'none' : 'flex';
+                }
+                
+                // If switching to online mode, try to connect to the server
+                if (!isOffline && !this.isConnected) {
+                    this.connect().catch(error => {
+                        console.error('Failed to connect to server:', error);
+                    });
+                }
+                
+                return isOffline;
+            }
+
+            // Add a method to send audio to the REST API
+            async sendAudioToRestApi(audioBlob) {
+                try {
+                    console.log('Sending audio to REST API...');
+                    this.updateStatus('Processing audio...', false);
+                    
+                    // Check if we have a valid audio blob
+                    if (!audioBlob || !(audioBlob instanceof Blob)) {
+                        console.error('Invalid audio blob:', audioBlob);
+                        throw new Error('Invalid audio data');
+                    }
+                    
+                    console.log('Audio blob size:', audioBlob.size, 'bytes, type:', audioBlob.type);
+                    
+                    // Create form data
+                    const formData = new FormData();
+                    formData.append('file', audioBlob, 'recording.wav');
+                    formData.append('token', this.apiToken);
+                    
+                    console.log('FormData created with token:', this.apiToken);
+                    
+                    // Log the form data contents for debugging
+                    for (let pair of formData.entries()) {
+                        console.log(pair[0], pair[1]);
+                    }
+                    
+                    // Send the request with proper CORS headers
+                    const response = await fetch(this.restApiUrl, {
+                        method: 'POST',
+                        body: formData,
+                        mode: 'cors'
+                    });
+                    
+                    if (!response.ok) {
+                        console.error('API response not OK:', response.status, response.statusText);
+                        const errorText = await response.text();
+                        console.error('Error response:', errorText);
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    // Parse the response
+                    const data = await response.json();
+                    console.log('REST API response:', data);
+                    
+                    if (data.success) {
+                        // Update the transcription
+                        this.updateTranscription(data.result.text, true);
+                        this.updateStatus('Transcription complete', false);
+                        
+                        // Show audio player if URL is provided
+                        if (data.result.audio_url) {
+                            const audioPlayer = document.getElementById('audioPlayer');
+                            audioPlayer.src = data.result.audio_url;
+                            document.getElementById('audioContainer').style.display = 'block';
+                        }
+                        
+                        return data.result.text;
+                    } else {
+                        throw new Error(data.msg || 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('Error sending audio to REST API:', error);
+                    this.updateStatus('Error: ' + error.message, false);
+                    return null;
+                }
+            }
+
+            // Add a method to set up visualizer for offline recording
+            setupVisualizerForOfflineRecording() {
+                const audioContext = new AudioContext();
+                const source = audioContext.createMediaStreamSource(this.mediaStream);
+                this.analyser = audioContext.createAnalyser();
+                this.analyser.fftSize = 256;
+                source.connect(this.analyser);
+            }
+
+            // Add a method to convert audio to proper WAV format
+            async convertToWav(audioBlob) {
+                // If it's already a WAV, just return it
+                if (audioBlob.type === 'audio/wav') {
+                    return audioBlob;
+                }
+                
+                try {
+                    console.log('Converting audio to WAV format');
+                    
+                    // Create an audio context
+                    const audioContext = new AudioContext();
+                    
+                    // Read the blob as an array buffer
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    
+                    // Decode the audio data
+                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                    
+                    // Convert to WAV
+                    const wavBuffer = this.audioBufferToWav(audioBuffer);
+                    
+                    // Create a new blob with WAV format
+                    const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+                    console.log('Converted to WAV:', wavBlob.size, 'bytes');
+                    
+                    return wavBlob;
+                } catch (error) {
+                    console.error('Error converting to WAV:', error);
+                    // Return the original blob if conversion fails
+                    return audioBlob;
+                }
+            }
+
+            // Add a method to convert AudioBuffer to WAV format
+            audioBufferToWav(audioBuffer) {
+                const numChannels = audioBuffer.numberOfChannels;
+                const sampleRate = audioBuffer.sampleRate;
+                const format = 1; // PCM
+                const bitDepth = 16;
+                
+                // Extract the audio data
+                const channelData = [];
+                for (let channel = 0; channel < numChannels; channel++) {
+                    channelData.push(audioBuffer.getChannelData(channel));
+                }
+                
+                // Interleave the channel data
+                const interleaved = new Float32Array(audioBuffer.length * numChannels);
+                for (let i = 0; i < audioBuffer.length; i++) {
+                    for (let channel = 0; channel < numChannels; channel++) {
+                        interleaved[i * numChannels + channel] = channelData[channel][i];
+                    }
+                }
+                
+                // Convert to 16-bit PCM
+                const dataLength = interleaved.length * 2; // 2 bytes per sample
+                const buffer = new ArrayBuffer(44 + dataLength); // 44 bytes for the header
+                const view = new DataView(buffer);
+                
+                // Write the WAV header
+                // "RIFF" chunk descriptor
+                this.writeString(view, 0, 'RIFF');
+                view.setUint32(4, 36 + dataLength, true);
+                this.writeString(view, 8, 'WAVE');
+                
+                // "fmt " sub-chunk
+                this.writeString(view, 12, 'fmt ');
+                view.setUint32(16, 16, true); // fmt chunk size
+                view.setUint16(20, format, true); // audio format (PCM)
+                view.setUint16(22, numChannels, true);
+                view.setUint32(24, sampleRate, true);
+                view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true); // byte rate
+                view.setUint16(32, numChannels * (bitDepth / 8), true); // block align
+                view.setUint16(34, bitDepth, true);
+                
+                // "data" sub-chunk
+                this.writeString(view, 36, 'data');
+                view.setUint32(40, dataLength, true);
+                
+                // Write the PCM samples
+                const offset = 44;
+                for (let i = 0; i < interleaved.length; i++) {
+                    const sample = Math.max(-1, Math.min(1, interleaved[i]));
+                    const value = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                    view.setInt16(offset + i * 2, value, true);
+                }
+                
+                return buffer;
+            }
+
+            // Helper method to write strings to DataView
+            writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+
+            // Add a method to process audio file in offline mode
+            async processAudioFileOffline(file) {
+                try {
+                    console.log('Processing audio file in offline mode:', file.name);
+                    
+                    // Reset any existing recording
+                    if (this.recording) {
+                        await this.stopRecording();
+                        isRecording = false;
+                        recordButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Recording</span>';
+                        recordButton.classList.remove('recording');
+                    }
+                    
+                    // Update status
+                    this.updateStatus('Processing file...', false);
+                    
+                    // Send directly to REST API
+                    await this.sendAudioToRestApi(file);
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error processing audio file in offline mode:', error);
+                    this.updateStatus('Error processing file: ' + error.message, false);
+                    return false;
+                }
+            }
+        }
+
+        // Initialize the application
+        const asrClient = new ASRClient();
+        const recordButton = document.getElementById('recordButton');
+        const playButton = document.getElementById('playButton');
+        const clearTranscriptButton = document.getElementById('clearTranscriptButton');
+        let isRecording = false;
+
+        recordButton.addEventListener('click', async () => {
+            if (!isRecording) {
+                await asrClient.startRecording();
+                recordButton.innerHTML = '<i class="fas fa-stop"></i><span>Stop Recording</span>';
+                recordButton.classList.add('recording');
+            } else {
+                await asrClient.stopRecording();
+                recordButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Recording</span>';
+                recordButton.classList.remove('recording');
+            }
+            isRecording = !isRecording;
+        });
+
+        playButton.addEventListener('click', () => {
+            asrClient.playRecording();
+        });
+        
+        clearTranscriptButton.addEventListener('click', () => {
+            document.getElementById('transcription').innerHTML = '';
+        });
+        
+        // Handle manual scrolling to disable auto-scroll
+        document.getElementById('transcription').addEventListener('wheel', () => {
+            if (document.getElementById('autoScrollToggle').checked) {
+                document.getElementById('autoScrollToggle').checked = false;
+            }
+        });
+
+        // Add file upload elements to the HTML
+        document.addEventListener('DOMContentLoaded', () => {
+            // Create file upload section
+            const fileSection = document.createElement('div');
+            fileSection.className = 'file-upload-container';
+            fileSection.innerHTML = `
+                <div class="file-upload-header">
+                    <i class="fas fa-file-audio file-icon"></i>
+                    <span>Upload Audio File</span>
+                </div>
+                <div class="file-upload-controls">
+                    <label for="audioFileInput" class="file-upload-button">
+                        <i class="fas fa-upload"></i>
+                        <span>Choose File</span>
+                    </label>
+                    <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
+                    <span id="fileNameDisplay">No file selected</span>
+                </div>
+                <div id="fileControls" style="display: none; margin-top: 15px;">
+                    <div class="file-progress-container">
+                        <progress id="fileProgress" value="0" max="100"></progress>
+                        <span id="fileProgressText">0%</span>
+                    </div>
+                    <div class="file-buttons">
+                        <button id="startFileButton">
+                            <i class="fas fa-play"></i>
+                            <span>Start Streaming</span>
+                        </button>
+                        <button id="stopFileButton">
+                            <i class="fas fa-stop"></i>
+                            <span>Stop</span>
+                        </button>
+                        <button id="resetFileButton">
+                            <i class="fas fa-undo"></i>
+                            <span>Reset</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Insert after the visualizer
+            const visualizerContainer = document.querySelector('.visualizer-container');
+            visualizerContainer.parentNode.insertBefore(fileSection, visualizerContainer.nextSibling);
+            
+            // Add styles
+            const styleElement = document.createElement('style');
+            styleElement.textContent = `
+                .file-upload-container {
+                    margin: 25px 0;
+                    padding: 20px;
+                    border-radius: var(--border-radius);
+                    background-color: white;
+                    box-shadow: var(--box-shadow);
+                }
+                
+                .file-upload-header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 15px;
+                    font-size: 18px;
+                    color: var(--primary-color);
+                }
+                
+                .file-icon {
+                    margin-right: 10px;
+                }
+                
+                .file-upload-controls {
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                }
+                
+                .file-upload-button {
+                    padding: 10px 20px;
+                    background-color: var(--primary-color);
+                    color: white;
+                    border-radius: var(--border-radius);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    transition: var(--transition);
+                }
+                
+                .file-upload-button:hover {
+                    background-color: var(--secondary-color);
+                    transform: translateY(-2px);
+                }
+                
+                #fileNameDisplay {
+                    color: var(--gray-color);
+                    font-style: italic;
+                }
+                
+                .file-progress-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 15px;
+                }
+                
+                #fileProgress {
+                    flex-grow: 1;
+                    height: 10px;
+                    border-radius: 5px;
+                }
+                
+                #fileProgress::-webkit-progress-bar {
+                    background-color: #f0f0f0;
+                    border-radius: 5px;
+                }
+                
+                #fileProgress::-webkit-progress-value {
+                    background-color: var(--primary-color);
+                    border-radius: 5px;
+                }
+                
+                #fileProgressText {
+                    min-width: 40px;
+                    text-align: right;
+                    color: var(--gray-color);
+                }
+                
+                .file-buttons {
+                    display: flex;
+                    gap: 10px;
+                }
+                
+                .file-buttons button {
+                    flex: 1;
+                    min-width: 0;
+                }
+                
+                #startFileButton {
+                    background-color: var(--primary-color);
+                    color: white;
+                }
+                
+                #stopFileButton {
+                    background-color: var(--danger-color);
+                    color: white;
+                }
+                
+                #resetFileButton {
+                    background-color: var(--gray-color);
+                    color: white;
+                }
+            `;
+            document.head.appendChild(styleElement);
+            
+            // Add event listeners for file controls
+            document.getElementById('audioFileInput').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    // Show loading state
+                    document.getElementById('fileNameDisplay').textContent = `Loading ${file.name}...`;
+                    
+                    try {
+                        // Process the file based on mode
+                        let success;
+                        if (asrClient.offlineMode) {
+                            // In offline mode, immediately send to REST API
+                            success = await asrClient.processAudioFileOffline(file);
+                        } else {
+                            // In online mode, prepare for streaming
+                            success = await asrClient.processAudioFile(file);
+                            
+                            // Show file controls in online mode
+                            document.getElementById('fileControls').style.display = 'flex';
+                        }
+                        
+                        if (success) {
+                            document.getElementById('fileNameDisplay').textContent = file.name;
+                            // Enable start button in online mode
+                            if (!asrClient.offlineMode) {
+                                document.getElementById('startFileButton').disabled = false;
+                            }
+                        } else {
+                            document.getElementById('fileNameDisplay').textContent = `Error loading ${file.name}`;
+                            document.getElementById('startFileButton').disabled = true;
+                        }
+                    } catch (error) {
+                        console.error('Error processing file:', error);
+                        document.getElementById('fileNameDisplay').textContent = `Error loading ${file.name}`;
+                        document.getElementById('startFileButton').disabled = true;
+                    }
+                }
+            });
+            
+            document.getElementById('startFileButton').addEventListener('click', () => {
+                if (asrClient.fileAudioBuffer && asrClient.fileAudioBuffer.length > 0) {
+                    asrClient.startFileStreaming();
+                    // Disable start button while streaming
+                    document.getElementById('startFileButton').disabled = true;
+                    // Enable stop button
+                    document.getElementById('stopFileButton').disabled = false;
+                } else {
+                    console.error('No audio file loaded');
+                }
+            });
+            
+            document.getElementById('stopFileButton').addEventListener('click', () => {
+                asrClient.stopFileStreaming();
+                // Enable start button
+                document.getElementById('startFileButton').disabled = false;
+                // Disable stop button
+                document.getElementById('stopFileButton').disabled = true;
+            });
+            
+            document.getElementById('resetFileButton').addEventListener('click', () => {
+                asrClient.resetFileStreaming();
+                // Enable start button
+                document.getElementById('startFileButton').disabled = false;
+                // Disable stop button
+                document.getElementById('stopFileButton').disabled = true;
+            });
+        });
+
+        // Add this to the document.addEventListener('DOMContentLoaded', ...) section
+        document.getElementById('modeToggle').addEventListener('change', (e) => {
+            const isOffline = e.target.checked;
+            asrClient.toggleMode(isOffline);
+            document.getElementById('modeLabel').textContent = isOffline ? 'Offline (REST API)' : 'Online (Streaming)';
+            
+            // Reset file input display
+            document.getElementById('fileNameDisplay').textContent = 'No file selected';
+            
+            // Reset any existing recording or streaming
+            if (asrClient.recording) {
+                asrClient.stopRecording();
+                const recordButton = document.getElementById('recordButton');
+                recordButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Recording</span>';
+                recordButton.classList.remove('recording');
+            }
+            
+            // Clear transcription
+            document.getElementById('transcription').innerHTML = '';
+            
+            // Hide audio player
+            document.getElementById('audioContainer').style.display = 'none';
+            
+            // Hide file controls when switching modes
+            const fileControls = document.getElementById('fileControls');
+            if (fileControls) {
+                fileControls.style.display = 'none';
+            }
+            
+            // Reset file progress
+            document.getElementById('fileProgress').value = 0;
+            document.getElementById('fileProgressText').textContent = '0%';
+        });
+
+        // Add this to the DOMContentLoaded event to set the initial mode correctly
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set the toggle to checked (offline mode) by default
+            document.getElementById('modeToggle').checked = true;
+            
+            // Initialize UI based on default mode
+            const fileControls = document.getElementById('fileControls');
+            if (fileControls) {
+                fileControls.style.display = 'none'; // Hide streaming controls in offline mode
+            }
+            
+            // Update status to show offline mode
+            asrClient.updateStatus('Offline Mode', false);
+        });
+    </script>
+
+
+<div class="glasp-extension-toaster" style="display: block; width: 320px; margin: unset; padding: unset; border: unset; border-radius: unset; outline: unset; background-color: unset; box-shadow: unset; position: fixed; top: 40px; right: 24px; z-index: 9999;"><template shadowrootmode="open"><div class="glasp-extension" style="font-family: inherit;"></div></template></div></body><div class="glasp-extension" style="display: block; width: unset; margin: unset; padding: unset; border: unset; border-radius: unset; outline: unset; background-color: unset; box-shadow: unset; position: fixed; bottom: 16px; right: 16px; z-index: 9999;"><div class="glasp-extension" style="font-family: inherit;"></div></div></html>

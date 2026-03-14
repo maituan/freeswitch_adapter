@@ -1,0 +1,96 @@
+STT,Hội thoại,Nhu cầu
+1,"Bot: Quý khách cần hỗ trợ thông tin gì trong các vấn đề sau, tư vấn về sản phẩm dịch vụ,  hỗ trợ công tác bồi thường, hay có vấn đề cần khiếu nại, hoặc cần hỗ trợ gì khác. Quý khách nói giúp em nhu cầu ạ.
+
+User: anh sắp đi nước ngoài cần hỏi cái bảo hiểm du lịch
+
+Bot: Anh chị quan tâm đến bảo hiểm du lịch trong nước hay quốc tế ạ?|CHAT
+
+User: quốc tế ấy em
+
+Bot: Anh chị có thể xem chi tiết quyền lợi nhanh chóng trên trang goét A Bích chấm com chấm vi en tại mục “Sản phẩm bảo hiểm”. Anh chị có muốn tự xem trước không ạ?|CHAT
+
+User: em nói qua cho anh hỏi cái số tiền bảo hiểm thế nào nhỉ
+
+Bot: Dạ về bảo hiểm du lịch quốc tế, số tiền bảo hiểm tai nạn cá nhân tối đa là năm tỷ năm trăm triệu đồng cho mỗi người trong trường hợp bảo hiểm cấp đơn một trăm phần trăm hoặc đồng bảo hiểm với tỷ lệ bằng hoặc lớn hơn năm mươi phần trăm. Nếu đồng bảo hiểm với tỷ lệ nhỏ hơn năm mươi phần trăm thì tối đa ba tỷ đồng cho mỗi người ạ.
+
+Ngoài ra, chi phí y tế do tai nạn hoặc bệnh tối đa bằng năm mươi phần trăm số tiền bảo hiểm tai nạn cá nhân và không quá ba tỷ đồng cho mỗi người. Các quyền lợi bổ sung như hồi hương thi hài, chi phí mai táng ngoài lãnh thổ Việt Nam, thăm thân nhân tại bệnh viện, chăm sóc trẻ em, thăm viếng để thu xếp tang lễ cũng có các mức giới hạn tương ứng theo quy định.
+
+Anh chị cần làm rõ thêm thông tin gì không ạ?|CHAT
+
+User: nếu mua 5 người có được giảm giá không em
+
+Bot: Em xin phép chuyển máy đến chuyên viên để tư vấn mức phí chi tiết theo trường hợp của mình. Anh chị có muốn em chuyển máy không ạ?|CHAT
+
+User: ý là sơ sơ chi phí khoảng bao nhiêu ấy
+
+Bot: Em xin phép chuyển máy đến chuyên viên để tư vấn mức phí chi tiết theo trường hợp của mình. Anh chị có muốn em chuyển máy không ạ?|CHAT
+
+User: ừ thế chuyển đi
+
+Bot: Em xin phép chuyển máy ngay ạ.|FORWARD
+
+",Tư vấn Du lịch quốc tế
+2,"Bot: Quý khách cần hỗ trợ thông tin gì trong các vấn đề sau, tư vấn về sản phẩm dịch vụ,  hỗ trợ công tác bồi thường, hay có vấn đề cần khiếu nại, hoặc cần hỗ trợ gì khác. Quý khách nói giúp em nhu cầu ạ.
+
+User: ừ anh đang ở sân bay mà bị trễ chuyến
+
+Bot: Dạ với yêu cầu bồi thường trên, anh/chị có muốn em tư vấn sơ qua về các điều kiện được chi trả trước không, hay mình muốn chuyển máy tới nhân viên hỗ trợ luôn ạ?|CHAT
+
+User: ừ nói qua cho anh đi
+
+Bot: Dạ anh chị vui lòng cho em biết anh chị quan tâm đến bảo hiểm du lịch trong nước hay quốc tế ạ?|CHAT
+
+User: anh bay đi sài gòn thôi đang trễ ở hà nội
+
+Bot: Dạ, Phạm vi bảo hiểm trong nước bao gồm các chuyến đi du lịch trong phạm vi lãnh thổ Việt Nam. Quyền lợi bảo hiểm gồm các điều kiện chính như tử vong do tai nạn, thương tật toàn bộ hoặc bộ phận do tai nạn, tử vong do bệnh (trừ bệnh có sẵn), cùng các điều khoản bổ sung như ngộ độc thức ăn, tai nạn trong hoạt động thể thao chuyên nghiệp hoặc nguy hiểm, cứu trợ y tế và hỗ trợ du lịch. Anh chị cần làm rõ thêm thông tin gì không ạ?|CHAT
+
+User: bây giờ bị trễ rồi thì làm sao để nhận tiền đây
+
+Bot: Dạ, về trường hợp chuyến đi du lịch bị trì hoãn trong bảo hiểm du lịch trong nước, ABIC sẽ chi trả quyền lợi bảo hiểm khi chuyến đi bị trì hoãn do các nguyên nhân như điều kiện thời tiết xấu, đình công, sự cố kỹ thuật hoặc lỗi máy móc của phương tiện vận chuyển. Quyền lợi bao gồm số tiền bảo hiểm tương ứng với số giờ bị trì hoãn liên tục theo quy định trong hợp đồng bảo hiểm hoặc giấy chứng nhận bảo hiểm, cùng chi phí đi lại bằng phương tiện giao thông công cộng phát sinh trực tiếp do việc trì hoãn chuyến đi, với điều kiện người được bảo hiểm phải thay đổi hành trình di chuyển.
+
+Điều kiện áp dụng gồm thời gian trì hoãn kéo dài hơn số giờ quy định, sự trì hoãn không do lỗi của người được bảo hiểm quên xác nhận vé hay làm thủ tục, và có giấy xác nhận của hãng vận chuyển về lịch trình, nguyên nhân và thời gian trễ chuyến.
+
+Anh chị cần làm rõ thêm thông tin gì không ạ?|CHAT
+
+User: bây giờ anh cần được bồi thường ngay
+
+Bot: Dạ, về yêu cầu bồi thường ngay trong trường hợp chuyến đi bị trì hoãn, em xin phép được chuyển máy đếntổng đài viên để hỗ trợ anh chị chi tiết và nhanh chóng hơn ạ. Em xin phép chuyển máy ngay ạ.|FORWARD
+",Tư vấn trễ chuyến (Du lịch trong nước)
+3,"Bot: Quý khách cần hỗ trợ thông tin gì trong các vấn đề sau, tư vấn về sản phẩm dịch vụ,  hỗ trợ công tác bồi thường, hay có vấn đề cần khiếu nại, hoặc cần hỗ trợ gì khác. Quý khách nói giúp em nhu cầu ạ.
+
+User: anh cần bồi thường trễ máy bay
+
+Bot: Dạ với yêu cầu bồi thường trên, anh/chị có muốn em tư vấn sơ qua về các điều kiện được chi trả trước không, hay mình muốn chuyển máy tới nhân viên hỗ trợ luôn ạ?|CHAT
+
+User: anh cần ngay luôn
+
+Bot: Dạ vâng, em xin phép chuyển máy sang bộ phận phụ trách bồi thường chuyến bay để hỗ trợ chi tiết cho anh/chị ạ.|FORWARD
+",Tư vấn trễ chuyến (Không tư vấn - bồi thường ngay
+4,"Bot: Quý khách cần hỗ trợ thông tin gì trong các vấn đề sau, tư vấn về sản phẩm dịch vụ,  hỗ trợ công tác bồi thường, hay có vấn đề cần khiếu nại, hoặc cần hỗ trợ gì khác. Quý khách nói giúp em nhu cầu ạ.
+
+User: ừ anh mới tai nạn xe bên mễ trì
+
+Bot: Anh/chị vui lòng cho em biết hợp đồng bảo hiểm xe cơ giới này được phát hành tại chi nhánh hoặc tỉnh thành phố nào ạ?|CHAT
+
+User: hà nội em ạ
+
+Bot: Em đã ghi nhận anh/chị cần hỗ trợ bồi thường tại Hà Nội ạ. Em xin phép chuyển máy sang chi nhánh phụ trách để hỗ trợ hồ sơ chi tiết cho anh/chị ạ.|FORWARD
+",Tư vấn bồi thường xe
+5,"Bot: Quý khách cần hỗ trợ thông tin gì trong các vấn đề sau, tư vấn về sản phẩm dịch vụ,  hỗ trợ công tác bồi thường, hay có vấn đề cần khiếu nại, hoặc cần hỗ trợ gì khác. Quý khách nói giúp em nhu cầu ạ.
+
+User: ừ hỗ trợ giúp anh cái thời hạn abic care anh đang dùng
+
+Bot: Anh/chị đang cần hỗ trợ thông tin về thời hạn của bảo hiểm sức khỏe toàn diện a-bích ke đúng không ạ. Anh/chị vui lòng cho em biết anh/chị muốn được tư vấn hay cần hỗ trợ khác ạ.|CHAT
+
+User: tư vấn em ạ
+
+Bot: Với các yêu cầu liên quan đến Bảo hiểm sức khỏe toàn diện a-bích ke, anh/chị sẽ được hỗ trợ trực tiếp qua hotline ghi trên thẻ bảo lãnh viện phí của mình ạ. Anh/chị vui lòng kiểm tra trên thẻ và gọi tới số hotline đó để được giải đáp chi tiết về quyền lợi, bồi thường cũng như các vấn đề khác ạ.|CHAT
+
+User: ừ là số trên thẻ hả
+
+Bot: Anh/chị đã thấy số hotline a-bích ke trên thẻ bảo lãnh viện phí và có thể chủ động liên hệ được chưa ạ.|CHAT
+
+User: ừ ok
+
+Bot: Nếu anh/chị không còn cần hỗ trợ thêm thông tin gì, em xin phép kết thúc cuộc gọi tại đây ạ. Em chào anh/chị ạ.|ENDCALL
+",Tư vấn ABIC Care

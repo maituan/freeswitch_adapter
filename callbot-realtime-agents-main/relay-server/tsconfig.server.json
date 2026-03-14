@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "../dist-relay",
+    "noEmit": false,
+    "baseUrl": "..",
+    "paths": { "@/*": ["src/*"] }
+  },
+  "include": [
+    "**/*.ts",
+    "../src/app/agentConfigs/**/*.ts",
+    "../src/app/lib/ttsClient.ts"
+  ]
+}
