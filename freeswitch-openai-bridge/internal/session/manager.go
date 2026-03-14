@@ -62,3 +62,12 @@ func (m *Manager) Delete(uuid string) {
 	defer m.mu.Unlock()
 	delete(m.sessions, uuid)
 }
+
+// SendToRelay pushes a control message to the relay service via the session's write channel.
+// Safe to call from any goroutine; no-op if the session has no relay connection.
+func (s *CallSession) SendToRelay(msg relay.ControlMsg) {
+	if s.RelayConn == nil {
+		return
+	}
+	_ = s.RelayConn.SendControl(msg)
+}

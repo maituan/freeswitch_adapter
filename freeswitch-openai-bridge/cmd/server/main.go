@@ -86,6 +86,7 @@ func main() {
 
 	esl.RegisterHandler("CHANNEL_ANSWER", handleAnswer)
 	esl.RegisterHandler("CHANNEL_HANGUP", handleHangup)
+	esl.RegisterHandler("PLAYBACK_STOP", handlePlaybackStop)
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -437,6 +438,19 @@ func handleHangup(ev *eventsocket.Event) {
 	if sess.CleanupFunc != nil {
 		sess.CleanupFunc("channel-hangup")
 	}
+}
+
+func handlePlaybackStop(ev *eventsocket.Event) {
+	uuid := ev.Get("Unique-Id")
+	sess := sessions.Get(uuid)
+	if sess == nil {
+		return
+	}
+	log.Printf("[Call] PLAYBACK_STOP forwarding to relay uuid=%s", uuid)
+	sess.SendToRelay(relay.ControlMsg{
+		Type:      "event",
+		EventName: "playback_stop",
+	})
 }
 
 type callRequest struct {

@@ -37,6 +37,8 @@ export class CallSession {
   private asrClient: AsrClient | null = null
   private playbackMuteTimer: ReturnType<typeof setTimeout> | null = null
   private isPlayingAudio = false
+  private pendingEndcall = false
+  private endcallFallbackTimer: ReturnType<typeof setTimeout> | null = null
   private history: CallHistoryMessage[] = []
   private turnId = 0
   private startTime = new Date()
@@ -200,7 +202,15 @@ export class CallSession {
       if (cmd) {
         console.log(`[Session] sending command action=${cmd.action} ext=${cmd.ext ?? ''}`)
         this.ws.send(JSON.stringify({ type: 'command', ...cmd }))
-        if (cmd.action === 'endcall') void this.cleanup()
+        if (cmd.action === 'endcall') {
+          // Defer cleanup until we receive playback_stop from the bridge,
+          // so the last TTS audio finishes playing before we tear down.
+          this.pendingEndcall = true
+          this.endcallFallbackTimer = setTimeout(() => {
+            console.log('[Session] endcall fallback timeout (60s), cleaning up')
+            void this.cleanup()
+          }, 60_000)
+        }
       }
     })
 
@@ -237,6 +247,25 @@ export class CallSession {
             this.sendEvent('client', 'interrupt', {})
           }
           if (msg.type === 'hangup') void this.cleanup()
+          if (msg.type === 'event' && msg.eventName === 'playback_stop') {
+            // Bridge confirmed FreeSWITCH finished playing — cancel the timer-based unmute
+            // and re-enable ASR immediately at the correct moment.
+            if (this.playbackMuteTimer) {
+              clearTimeout(this.playbackMuteTimer)
+              this.playbackMuteTimer = null
+            }
+            this.isPlayingAudio = false
+            this.sendEvent('client', 'asr_unmuted', {})
+            // If we were waiting for the last TTS to finish before hanging up, do it now.
+            if (this.pendingEndcall) {
+              if (this.endcallFallbackTimer) {
+                clearTimeout(this.endcallFallbackTimer)
+                this.endcallFallbackTimer = null
+              }
+              this.pendingEndcall = false
+              void this.cleanup()
+            }
+          }
         } catch {}
       }
     })
@@ -263,6 +292,10 @@ export class CallSession {
 
     await this.flushHistory()
 
+    if (this.endcallFallbackTimer) {
+      clearTimeout(this.endcallFallbackTimer)
+      this.endcallFallbackTimer = null
+    }
     if (this.playbackMuteTimer) clearTimeout(this.playbackMuteTimer)
     this.playbackMuteTimer = null
     this.isPlayingAudio = false

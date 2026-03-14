@@ -35,9 +35,15 @@ type ConnectParams struct {
 	CustomData map[string]interface{}
 }
 
+type writeMsg struct {
+	msgType int
+	data    []byte
+}
+
 type Client struct {
-	conn *websocket.Conn
-	mu   sync.Mutex
+	conn   *websocket.Conn
+	sendCh chan writeMsg
+	once   sync.Once
 }
 
 func Connect(params ConnectParams) (*Client, error) {
@@ -104,14 +110,53 @@ func Connect(params ConnectParams) (*Client, error) {
 	conn.SetReadDeadline(time.Time{})
 	log.Printf("[Relay] Connected and ready url=%s", u.String())
 
-	return &Client{conn: conn}, nil
+	c := &Client{
+		conn:   conn,
+		sendCh: make(chan writeMsg, 32),
+	}
+	c.startWriteLoop()
+	return c, nil
+}
+
+// startWriteLoop starts a dedicated goroutine that owns all WebSocket writes,
+// ensuring only one writer at a time (gorilla/websocket requires this).
+func (c *Client) startWriteLoop() {
+	go func() {
+		defer c.conn.Close()
+		for msg := range c.sendCh {
+			if err := c.conn.WriteMessage(msg.msgType, msg.data); err != nil {
+				log.Printf("[Relay] write error: %v", err)
+				return
+			}
+		}
+		// Channel was closed cleanly — send hangup before connection closes.
+		_ = c.conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hangup"}`))
+	}()
+}
+
+// send pushes a message onto the write channel. Returns an error if the client is closed.
+func (c *Client) send(msgType int, data []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("relay client closed")
+		}
+	}()
+	c.sendCh <- writeMsg{msgType, data}
+	return nil
 }
 
 // SendAudio sends raw PCM16 8kHz audio to the relay.
 func (c *Client) SendAudio(pcm []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.conn.WriteMessage(websocket.BinaryMessage, pcm)
+	return c.send(websocket.BinaryMessage, pcm)
+}
+
+// SendControl sends a JSON control message to the relay.
+func (c *Client) SendControl(msg ControlMsg) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return c.send(websocket.TextMessage, data)
 }
 
 // ReadLoop dispatches incoming relay messages to callbacks. Blocks until closed.
@@ -135,10 +180,9 @@ func (c *Client) ReadLoop(onAudio func([]byte), onControl func(ControlMsg)) {
 	}
 }
 
-// Close sends a hangup signal and closes the connection.
+// Close signals the write loop to flush remaining messages, send a hangup, and close the connection.
 func (c *Client) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hangup"}`))
-	c.conn.Close()
+	c.once.Do(func() {
+		close(c.sendCh)
+	})
 }

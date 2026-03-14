@@ -89,6 +89,7 @@ func (es *EventSocket) subscribe() error {
 		"CHANNEL_ANSWER",
 		"CHANNEL_HANGUP",
 		"CHANNEL_HANGUP_COMPLETE",
+		"PLAYBACK_STOP",
 	}
 
 	for _, event := range events {
