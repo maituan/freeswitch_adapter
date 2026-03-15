@@ -40,10 +40,6 @@ var (
 
 type preCallData struct {
 	Scenario   string
-	LeadID     string
-	Gender     string
-	Name       string
-	Plate      string
 	VoiceID    string
 	CustomData map[string]interface{}
 }
@@ -181,8 +177,8 @@ func handleAnswer(ev *eventsocket.Event) {
 		scenario = "leadgenTNDS"
 	}
 
-	log.Printf("[Call] ANSWER uuid=%s phone=%s scenario=%s gender=%s name=%s plate=%s",
-		uuid, phone, scenario, pd.Gender, pd.Name, pd.Plate)
+	log.Printf("[Call] ANSWER uuid=%s phone=%s scenario=%s customData=%v",
+		uuid, phone, scenario, pd.CustomData)
 
 	// Create session
 	sess := sessions.Create(uuid, phone)
@@ -234,10 +230,6 @@ func handleAnswer(ev *eventsocket.Event) {
 		CallID:     uuid,
 		Scenario:   scenario,
 		Phone:      phone,
-		LeadID:     pd.LeadID,
-		Gender:     pd.Gender,
-		Name:       pd.Name,
-		Plate:      pd.Plate,
 		VoiceID:    pd.VoiceID,
 		APIKey:     cfg.Relay.APIKey,
 		CustomData: pd.CustomData,
@@ -531,14 +523,26 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cd := req.CustomData
+	if cd == nil {
+		cd = make(map[string]interface{})
+	}
+	if req.LeadID != "" {
+		cd["leadId"] = req.LeadID
+	}
+	if req.Gender != "" {
+		cd["gender"] = req.Gender
+	}
+	if req.Name != "" {
+		cd["name"] = req.Name
+	}
+	if req.Plate != "" {
+		cd["plate"] = req.Plate
+	}
 	pd := preCallData{
 		Scenario:   scenario,
-		LeadID:     req.LeadID,
-		Gender:     req.Gender,
-		Name:       req.Name,
-		Plate:      req.Plate,
 		VoiceID:    req.VoiceID,
-		CustomData: req.CustomData,
+		CustomData: cd,
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
@@ -554,7 +558,7 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 // originateCall is used by both single-call API and campaign workers.
-func originateCall(phone, callerID, scenario, leadID, gender, name, plate string, customData map[string]interface{}) (string, error) {
+func originateCall(phone, callerID, scenario string, customData map[string]interface{}) (string, error) {
 	target := phone
 	if callerID == "" {
 		callerID = "callbot"
@@ -568,10 +572,6 @@ func originateCall(phone, callerID, scenario, leadID, gender, name, plate string
 
 	pd := preCallData{
 		Scenario:   scenario,
-		LeadID:     leadID,
-		Gender:     gender,
-		Name:       name,
-		Plate:      plate,
 		CustomData: customData,
 	}
 	bridgeUUIDs.Store(callUUID, true)

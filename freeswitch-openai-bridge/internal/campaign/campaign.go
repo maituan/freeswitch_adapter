@@ -92,7 +92,7 @@ func (c *Campaign) UpdateLeadStatus(callUUID string, status CallStatus) {
 	}
 }
 
-type OriginateFunc func(phone, callerID, scenario, leadID, gender, name, plate string, customData map[string]interface{}) (callUUID string, err error)
+type OriginateFunc func(phone, callerID, scenario string, customData map[string]interface{}) (callUUID string, err error)
 
 // Manager stores campaigns in memory and runs workers.
 type Manager struct {
@@ -228,7 +228,23 @@ func (m *Manager) runWorkers(c *Campaign, originate OriginateFunc) {
 			l.StartedAt = &now
 			c.mu.Unlock()
 
-			callUUID, err := originate(l.Phone, c.CallerID, c.Scenario, l.LeadID, l.Gender, l.Name, l.Plate, l.CustomData)
+			cd := l.CustomData
+			if cd == nil {
+				cd = make(map[string]interface{})
+			}
+			if l.LeadID != "" {
+				cd["leadId"] = l.LeadID
+			}
+			if l.Gender != "" {
+				cd["gender"] = l.Gender
+			}
+			if l.Name != "" {
+				cd["name"] = l.Name
+			}
+			if l.Plate != "" {
+				cd["plate"] = l.Plate
+			}
+			callUUID, err := originate(l.Phone, c.CallerID, c.Scenario, cd)
 			c.mu.Lock()
 			if err != nil {
 				l.Status = StatusFailed

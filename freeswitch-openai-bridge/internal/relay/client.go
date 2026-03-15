@@ -26,10 +26,6 @@ type ConnectParams struct {
 	CallID     string
 	Scenario   string
 	Phone      string
-	LeadID     string
-	Gender     string
-	Name       string
-	Plate      string
 	VoiceID    string
 	APIKey     string
 	CustomData map[string]interface{}
@@ -57,18 +53,6 @@ func Connect(params ConnectParams) (*Client, error) {
 	}
 	q.Set("scenario", params.Scenario)
 	q.Set("phone", params.Phone)
-	if params.LeadID != "" {
-		q.Set("leadId", params.LeadID)
-	}
-	if params.Gender != "" {
-		q.Set("gender", params.Gender)
-	}
-	if params.Name != "" {
-		q.Set("name", params.Name)
-	}
-	if params.Plate != "" {
-		q.Set("plate", params.Plate)
-	}
 	if params.VoiceID != "" {
 		q.Set("voiceId", params.VoiceID)
 	}
