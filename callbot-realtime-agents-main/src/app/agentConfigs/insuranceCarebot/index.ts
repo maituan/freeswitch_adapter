@@ -25,5 +25,3 @@ export const insuranceCarebotScenario: RealtimeAgent[] = [
 export const insuranceCarebotMetadata = {
   isTextOnly: true,
 };
-
-export { setCarebotRuntimeContext, resetCarebotRuntimeContext } from './core/contextSchema';

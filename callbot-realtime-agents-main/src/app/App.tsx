@@ -24,7 +24,6 @@ import {
   createLeadgenOpeningGuardrail,
   createModerationGuardrail,
 } from "@/app/agentConfigs/guardrails";
-import { setAbicHotlineContext } from "@/app/agentConfigs/abicHotline/context";
 
 // Agent configs
 import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
@@ -40,8 +39,7 @@ import { bidvBotScenario } from "@/app/agentConfigs/bidvBot";
 import { abicHotlineScenario } from "@/app/agentConfigs/abicHotline";
 import { leadgenTndsScenario } from "@/app/agentConfigs/leadgenTNDS";
 import { createLeadgenRouterAgent } from "@/app/agentConfigs/leadgenTNDS/router/agent";
-import { setLeadgenRuntimeContext } from "@/app/agentConfigs/leadgenTNDS/tools";
-import { insuranceCarebotScenario, setCarebotRuntimeContext } from "@/app/agentConfigs/insuranceCarebot";
+import { insuranceCarebotScenario } from "@/app/agentConfigs/insuranceCarebot";
 import type { CampaignType, PreferredPronoun } from "@/app/agentConfigs/insuranceCarebot/core/contextSchema";
 import { createRenewalReminderAgent } from "@/app/agentConfigs/insuranceCarebot/scenarios/renewalReminderAgent";
 
@@ -219,13 +217,6 @@ function App() {
     return id;
   }, [agentSetKey, devRunId]);
 
-  // Provide session context to ABIC tools (so they can read/write state via /api/state)
-  useEffect(() => {
-    if (!callSessionId) return;
-    if (agentSetKey === 'abicHotline') {
-      setAbicHotlineContext({ agentConfig: agentSetKey, sessionId: callSessionId });
-    }
-  }, [agentSetKey, callSessionId]);
 
   const [abicTestMode, setAbicTestMode] = useState<string>(
     () => searchParams.get('abicTestB3') || 'international',
@@ -289,59 +280,6 @@ function App() {
   );
   const isChatOnlyMode =
     (agentSetKey === 'carebotAuto365' || agentSetKey === 'leadgenTNDS') && carebotChatOnly;
-  useEffect(() => {
-    if (agentSetKey !== 'leadgenTNDS') return;
-    setLeadgenRuntimeContext({
-      leadId: searchParams.get('leadId') || undefined,
-      phoneNumber: searchParams.get('phoneNumber') || undefined,
-      overrideGender: leadgenGender.trim() || undefined,
-      overrideName: leadgenName.trim() || undefined,
-      overridePlate: leadgenPlate.trim() || undefined,
-    });
-  }, [agentSetKey, searchParams, leadgenGender, leadgenName, leadgenPlate]);
-  useEffect(() => {
-    if (agentSetKey !== 'carebotAuto365') return;
-    const campaignTypeRaw = carebotCampaignType || carebotFeDefaults.campaignType;
-    const preferredPronounRaw = carebotPronoun || carebotFeDefaults.preferredPronoun;
-    setCarebotRuntimeContext({
-      campaignType: carebotCampaignTypes.has(campaignTypeRaw as CampaignType)
-        ? (campaignTypeRaw as CampaignType)
-        : carebotFeDefaults.campaignType,
-      triggerReason: carebotTriggerReason.trim() || carebotFeDefaults.triggerReason,
-      customerId: carebotCustomerId.trim() || carebotFeDefaults.customerId,
-      customerName: carebotCustomerName.trim() || carebotFeDefaults.customerName,
-      phoneNumber: carebotPhoneNumber.trim() || carebotFeDefaults.phoneNumber,
-      preferredPronoun: carebotPronouns.has(preferredPronounRaw as PreferredPronoun)
-        ? (preferredPronounRaw as PreferredPronoun)
-        : 'anh',
-      licensePlate: carebotLicensePlate.trim() || carebotFeDefaults.licensePlate,
-      expiryDate: carebotExpiryDate.trim() || carebotFeDefaults.expiryDate,
-      baseFee: carebotBaseFee.trim() || carebotFeDefaults.baseFee,
-      discountPercent: carebotDiscountPercent.trim() || carebotFeDefaults.discountPercent,
-      discountedFee: carebotDiscountedFee.trim() || carebotFeDefaults.discountedFee,
-      discountInfo: carebotDiscountInfo.trim() || carebotFeDefaults.discountInfo,
-      agentName: carebotAgentName.trim() || carebotFeDefaults.agentName,
-      companyName: carebotCompanyName.trim() || carebotFeDefaults.companyName,
-      hotlineNumber: carebotHotlineNumber.trim() || carebotFeDefaults.hotlineNumber,
-    });
-  }, [
-    agentSetKey,
-    carebotCampaignType,
-    carebotTriggerReason,
-    carebotCustomerId,
-    carebotCustomerName,
-    carebotPhoneNumber,
-    carebotPronoun,
-    carebotLicensePlate,
-    carebotExpiryDate,
-    carebotBaseFee,
-    carebotDiscountPercent,
-    carebotDiscountedFee,
-    carebotDiscountInfo,
-    carebotAgentName,
-    carebotCompanyName,
-    carebotHotlineNumber,
-  ]);
   useEffect(() => {
     if (agentSetKey !== 'abicHotline') return;
     if (!abicTestMode || abicTestMode === 'off') return;
@@ -506,6 +444,8 @@ function App() {
 
         // Ensure the selectedAgentName is first so that it becomes the root
         const reorderedAgents = [...sdkScenarioMap[agentSetKey]];
+        // customData is passed to tools via runContext.context.customData (single source of truth).
+        let customData: Record<string, any> = {};
         const idx = reorderedAgents.findIndex((a) => a.name === selectedAgentName);
         if (idx > 0) {
           const [agent] = reorderedAgents.splice(idx, 1);
@@ -540,6 +480,13 @@ function App() {
             `Em check thấy xe biển số ${bks} của ${gender} sắp hết hạn rồi này. ` +
             `Em viết nối hạn luôn cho ${genger} nha.`;
           reorderedAgents[0] = createLeadgenRouterAgent(openingText);
+          customData = {
+            leadId: lead.leadId,
+            phone: lead.phoneNumber,
+            gender: genderOverride || undefined,
+            name: nameOverride || undefined,
+            plate: plateOverride || undefined,
+          };
         }
 
         if (agentSetKey === 'carebotAuto365') {
@@ -578,6 +525,33 @@ function App() {
               secondLine,
             });
           }
+          const campaignTypeRaw = carebotCampaignType || carebotFeDefaults.campaignType;
+          const preferredPronounRaw = carebotPronoun || carebotFeDefaults.preferredPronoun;
+          customData = {
+            campaignType: carebotCampaignTypes.has(campaignTypeRaw as CampaignType)
+              ? campaignTypeRaw
+              : carebotFeDefaults.campaignType,
+            triggerReason: carebotTriggerReason.trim() || carebotFeDefaults.triggerReason,
+            customerId: carebotCustomerId.trim() || carebotFeDefaults.customerId,
+            customerName: carebotCustomerName.trim() || carebotFeDefaults.customerName,
+            phoneNumber: carebotPhoneNumber.trim() || carebotFeDefaults.phoneNumber,
+            preferredPronoun: carebotPronouns.has(preferredPronounRaw as PreferredPronoun)
+              ? preferredPronounRaw
+              : 'anh',
+            licensePlate: carebotLicensePlate.trim() || carebotFeDefaults.licensePlate,
+            expiryDate: carebotExpiryDate.trim() || carebotFeDefaults.expiryDate,
+            baseFee: carebotBaseFee.trim() || carebotFeDefaults.baseFee,
+            discountPercent: carebotDiscountPercent.trim() || carebotFeDefaults.discountPercent,
+            discountedFee: carebotDiscountedFee.trim() || carebotFeDefaults.discountedFee,
+            discountInfo: carebotDiscountInfo.trim() || carebotFeDefaults.discountInfo,
+            agentName: carebotAgentName.trim() || carebotFeDefaults.agentName,
+            companyName: carebotCompanyName.trim() || carebotFeDefaults.companyName,
+            hotlineNumber: carebotHotlineNumber.trim() || carebotFeDefaults.hotlineNumber,
+          };
+        }
+
+        if (agentSetKey === 'abicHotline') {
+          customData = { agentConfig: agentSetKey, sessionId: callSessionId };
         }
 
         const companyName = agentSetKey === 'customerServiceRetail'
@@ -607,6 +581,7 @@ function App() {
           outputGuardrails: guardrails,
           extraContext: {
             addTranscriptBreadcrumb,
+            customData,
           },
           isTextOnly: isTextOnlyMode,
           disableMicInput: isChatOnlyMode,

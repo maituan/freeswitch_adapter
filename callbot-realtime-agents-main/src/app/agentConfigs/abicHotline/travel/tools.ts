@@ -1,6 +1,5 @@
 import { tool } from '@openai/agents/realtime';
 import { abicTravelKbItems, type AbicTravelKbItem, type AbicTravelScope } from './travelKb';
-import { getAbicHotlineContext } from '../context';
 import { abicTravelDocs, type AbicTravelDocScope } from './knowledgeSources';
 
 type AbicToolScope = AbicTravelScope | 'AUTO';
@@ -456,10 +455,9 @@ export const abicTravelNextStepTool = tool({
   execute: async (args: any, runContext?: any) => {
     const { userText } = args as { userText: string };
     const cd = ((runContext?.context as any)?.customData ?? {}) as Record<string, any>;
-    const fallback = getAbicHotlineContext();
     const sc: SessionCtx = {
-      agentConfig: cd.agentConfig ?? fallback.agentConfig,
-      sessionId  : cd.sessionId  ?? fallback.sessionId,
+      agentConfig: cd.agentConfig ?? 'abicHotline',
+      sessionId  : cd.sessionId  ?? '',
     };
 
     await debugLog(sc, 'input', { userText });

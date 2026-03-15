@@ -31,10 +31,7 @@ export type CarebotContext = {
   lastInteractionSummary?: string;
 };
 
-export type CarebotRuntimeContextOverrides = Partial<CarebotContext> & {
-  campaignType?: CampaignType;
-};
-
+// Default values used when customData is not provided (e.g. unit tests or minimal setups).
 const defaultContext: CarebotContext = {
   campaignType: 'renewal_reminder',
   triggerReason: 'scheduled_campaign',
@@ -49,19 +46,6 @@ const defaultContext: CarebotContext = {
   zaloEnabled: true,
 };
 
-let runtimeContext: CarebotContext = { ...defaultContext };
-
-export function setCarebotRuntimeContext(next: CarebotRuntimeContextOverrides) {
-  runtimeContext = {
-    ...runtimeContext,
-    ...next,
-  };
-}
-
 export function getCarebotRuntimeContext(): CarebotContext {
-  return { ...runtimeContext };
-}
-
-export function resetCarebotRuntimeContext() {
-  runtimeContext = { ...defaultContext };
+  return { ...defaultContext };
 }

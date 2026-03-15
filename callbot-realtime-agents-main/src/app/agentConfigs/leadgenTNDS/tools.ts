@@ -32,24 +32,6 @@ type LeadRecord = {
 
 const BASE_URL = process.env.BASE_URL ?? ''
 
-type LeadgenRuntimeContext = {
-  leadId?: string;
-  phoneNumber?: string;
-  overrideGender?: string;
-  overrideName?: string;
-  overridePlate?: string;
-  customData?: Record<string, any>;
-};
-
-let leadgenRuntimeContext: LeadgenRuntimeContext = {};
-
-export function setLeadgenRuntimeContext(next: LeadgenRuntimeContext) {
-  leadgenRuntimeContext = { ...next };
-}
-
-export function getCustomData(): Record<string, any> {
-  return leadgenRuntimeContext.customData ?? {};
-}
 
 function nonEmpty(value?: string): string | undefined {
   const v = String(value ?? '').trim();
@@ -159,8 +141,8 @@ export const getLeadContextTool = tool({
     const ctx = (runContext?.context ?? {}) as Record<string, any>;
     const cd  = (ctx.customData ?? {}) as Record<string, any>;
 
-    const resolvedLeadId      = nonEmpty(leadId)      ?? nonEmpty(ctx.leadId ?? cd.leadId)   ?? nonEmpty(leadgenRuntimeContext.leadId);
-    const resolvedPhoneNumber = nonEmpty(phoneNumber) ?? nonEmpty(ctx.phone  ?? cd.phone)    ?? nonEmpty(leadgenRuntimeContext.phoneNumber);
+    const resolvedLeadId      = nonEmpty(leadId)      ?? nonEmpty(ctx.leadId ?? cd.leadId);
+    const resolvedPhoneNumber = nonEmpty(phoneNumber) ?? nonEmpty(ctx.phone  ?? cd.phone);
     let apiLead: Record<string, any> | null = null;
 
     try {
@@ -177,9 +159,9 @@ export const getLeadContextTool = tool({
     }
 
     const record: Record<string, any> = { ...(apiLead ?? {}) };
-    const overrideGender = nonEmpty(cd.gender) ?? nonEmpty(leadgenRuntimeContext.overrideGender);
-    const overrideName   = nonEmpty(cd.name)   ?? nonEmpty(leadgenRuntimeContext.overrideName);
-    const overridePlate  = nonEmpty(cd.plate)  ?? nonEmpty(leadgenRuntimeContext.overridePlate);
+    const overrideGender = nonEmpty(cd.gender);
+    const overrideName   = nonEmpty(cd.name);
+    const overridePlate  = nonEmpty(cd.plate);
     if (overrideGender) {
       record.gender = overrideGender;
       record.genger = overrideGender;

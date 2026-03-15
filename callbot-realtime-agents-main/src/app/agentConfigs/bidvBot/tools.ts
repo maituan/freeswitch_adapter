@@ -6,17 +6,14 @@ type Addressing = 'anh' | 'chị' | 'quý khách';
 
 const APP_NAME = 'BIDV SmartBanking';
 
-let lockedAddressing: Addressing = 'quý khách';
-
 function updateLockedAddressing(text: string, ctx?: Record<string, any>): Addressing {
   const t = normalizeForSearch(text);
-  // Read from per-session context if available, else fall back to singleton (browser path).
-  let current: Addressing = ctx ? ((ctx._addressing as Addressing) ?? 'quý khách') : lockedAddressing;
+  // Read/write addressing from per-session runContext so it never leaks across sessions.
+  let current: Addressing = (ctx?._addressing as Addressing) ?? 'quý khách';
   // Only update when we see explicit self-reference; keep previous on short replies like "đúng rồi".
   if (/(^|\s)anh(\s|$)/.test(t)) current = 'anh';
   else if (/(^|\s)chi(\s|$)/.test(t)) current = 'chị';
   if (ctx) ctx._addressing = current;
-  else lockedAddressing = current;
   return current;
 }
 
