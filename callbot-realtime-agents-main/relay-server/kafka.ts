@@ -12,13 +12,10 @@ export interface CallHistoryPayload {
   call_id: string
   scenario: string
   phone: string
-  lead_id: string
-  gender: string
-  name: string
-  plate: string
   start_time: string
   end_time: string
   history: CallHistoryMessage[]
+  customer_info: Record<string, any>
 }
 
 let producer: Producer | null = null

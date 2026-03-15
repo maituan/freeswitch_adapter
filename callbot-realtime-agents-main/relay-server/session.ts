@@ -1,7 +1,6 @@
 import { WebSocket } from 'ws'
 import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
-import { setLeadgenRuntimeContext } from '../src/app/agentConfigs/leadgenTNDS/tools'
 import { AsrClient } from './asrClient'
 import { streamTTSAudio } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
@@ -51,10 +50,6 @@ export class CallSession {
       callId     : string
       scenario   : string
       phone      : string
-      leadId     : string
-      gender     : string
-      name       : string
-      plate      : string
       voiceId    : string
       customData : Record<string, any>
     }
@@ -76,27 +71,16 @@ export class CallSession {
       return
     }
 
-    // 1. Seed per-scenario runtime context from URL params + customData
     const cd = this.opts.customData ?? {}
-    if (this.opts.scenario === 'leadgenTNDS') {
-      setLeadgenRuntimeContext({
-        leadId         : this.opts.leadId  || cd.leadId    || undefined,
-        phoneNumber    : this.opts.phone   || cd.phone     || undefined,
-        overrideGender : this.opts.gender  || cd.gender    || undefined,
-        overrideName   : this.opts.name    || cd.name      || undefined,
-        overridePlate  : this.opts.plate   || cd.plate     || undefined,
-        customData     : cd,
-      })
-    }
 
-    // 2. Create OpenAI Realtime session — text-only mode, no audio to OpenAI
+    // 1. Create OpenAI Realtime session — text-only mode, no audio to OpenAI
     this.realtimeSession = new RealtimeSession(agents[0], {
       transport: 'websocket',
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini-realtime-preview',
       config: {
         modalities: ['text'],
       },
-      context: { phone: this.opts.phone, leadId: this.opts.leadId, customData: cd },
+      context: { phone: this.opts.phone, leadId: cd.leadId, customData: cd },
     })
 
     // 3. Handle session-level errors so they don't crash the process
@@ -333,20 +317,18 @@ export class CallSession {
   }
 
   private async flushHistory() {
-    const callId = this.opts.callId || this.opts.phone || this.opts.leadId || ''
+    const cd = this.opts.customData ?? {}
+    const callId = this.opts.callId || this.opts.phone || cd.leadId || ''
     if (!callId || !this.history.length) return
 
     const payload: CallHistoryPayload = {
       call_id: this.opts.callId || '',
       scenario: this.opts.scenario,
       phone: this.opts.phone,
-      lead_id: this.opts.leadId,
-      gender: this.opts.gender,
-      name: this.opts.name,
-      plate: this.opts.plate,
       start_time: this.startTime.toISOString(),
       end_time: (this.endTime || new Date()).toISOString(),
       history: this.history,
+      customer_info: { ...cd },
     }
 
     await sendCallHistory(callId, payload)

@@ -160,10 +160,13 @@ export const getLeadContextTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async (args: any) => {
+  execute: async (args: any, runContext?: any) => {
     const { leadId, phoneNumber } = args as { leadId?: string; phoneNumber?: string };
-    const resolvedLeadId = nonEmpty(leadId) ?? nonEmpty(leadgenRuntimeContext.leadId);
-    const resolvedPhoneNumber = nonEmpty(phoneNumber) ?? nonEmpty(leadgenRuntimeContext.phoneNumber);
+    const ctx = (runContext?.context ?? {}) as Record<string, any>;
+    const cd  = (ctx.customData ?? {}) as Record<string, any>;
+
+    const resolvedLeadId      = nonEmpty(leadId)      ?? nonEmpty(ctx.leadId ?? cd.leadId)   ?? nonEmpty(leadgenRuntimeContext.leadId);
+    const resolvedPhoneNumber = nonEmpty(phoneNumber) ?? nonEmpty(ctx.phone  ?? cd.phone)    ?? nonEmpty(leadgenRuntimeContext.phoneNumber);
     let apiLead: Record<string, any> | null = null;
 
     try {
@@ -185,9 +188,9 @@ export const getLeadContextTool = tool({
       ...(apiLead ?? {}),
       ...(localLead ?? {}),
     };
-    const overrideGender = nonEmpty(leadgenRuntimeContext.overrideGender);
-    const overrideName = nonEmpty(leadgenRuntimeContext.overrideName);
-    const overridePlate = nonEmpty(leadgenRuntimeContext.overridePlate);
+    const overrideGender = nonEmpty(cd.gender) ?? nonEmpty(leadgenRuntimeContext.overrideGender);
+    const overrideName   = nonEmpty(cd.name)   ?? nonEmpty(leadgenRuntimeContext.overrideName);
+    const overridePlate  = nonEmpty(cd.plate)  ?? nonEmpty(leadgenRuntimeContext.overridePlate);
     if (overrideGender) {
       record.gender = overrideGender;
       record.genger = overrideGender;

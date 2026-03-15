@@ -8,12 +8,16 @@ const APP_NAME = 'BIDV SmartBanking';
 
 let lockedAddressing: Addressing = 'quý khách';
 
-function updateLockedAddressing(text: string): Addressing {
+function updateLockedAddressing(text: string, ctx?: Record<string, any>): Addressing {
   const t = normalizeForSearch(text);
+  // Read from per-session context if available, else fall back to singleton (browser path).
+  let current: Addressing = ctx ? ((ctx._addressing as Addressing) ?? 'quý khách') : lockedAddressing;
   // Only update when we see explicit self-reference; keep previous on short replies like "đúng rồi".
-  if (/(^|\s)anh(\s|$)/.test(t)) lockedAddressing = 'anh';
-  else if (/(^|\s)chi(\s|$)/.test(t)) lockedAddressing = 'chị';
-  return lockedAddressing;
+  if (/(^|\s)anh(\s|$)/.test(t)) current = 'anh';
+  else if (/(^|\s)chi(\s|$)/.test(t)) current = 'chị';
+  if (ctx) ctx._addressing = current;
+  else lockedAddressing = current;
+  return current;
 }
 
 function renderTemplate(text: string, addressing: Addressing): string {
@@ -153,9 +157,10 @@ export const lookupBidvKBTool = tool({
     required: ['scenario', 'userProblem'],
     additionalProperties: false,
   },
-  execute: async (args: any) => {
+  execute: async (args: any, runContext?: any) => {
     const { scenario, userProblem } = args as { scenario: BidvToolScenario; userProblem: string };
-    const addressing = updateLockedAddressing(userProblem);
+    const ctx = (runContext?.context as any) ?? undefined;
+    const addressing = updateLockedAddressing(userProblem, ctx);
 
     const candidates = scenario === 'AUTO' ? bidvKbItems : bidvKbItems.filter((i) => i.scenario === scenario);
     // --- SOTA-ish approach in this repo: embeddings (server) + LLM rerank with json_schema ---

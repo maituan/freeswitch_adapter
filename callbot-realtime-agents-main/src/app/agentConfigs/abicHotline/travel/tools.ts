@@ -389,8 +389,10 @@ function containsPricingTrigger(text: string) {
   return /(gia|phi|bao gia|chi phi|giam gia|chiet khau|khuyen mai|uu dai|mua nhu the nao|cach mua|kenh ban|co ban khong)/.test(q);
 }
 
-async function readState(): Promise<{ lastAgentName?: string; data?: any } | null> {
-  const { agentConfig, sessionId } = getAbicHotlineContext();
+type SessionCtx = { agentConfig: string; sessionId: string };
+
+async function readState(sc: SessionCtx): Promise<{ lastAgentName?: string; data?: any } | null> {
+  const { agentConfig, sessionId } = sc;
   if (!sessionId) return null;
   const res = await fetch(
     `/api/state?agentConfig=${encodeURIComponent(agentConfig)}&sessionId=${encodeURIComponent(sessionId)}`
@@ -400,8 +402,8 @@ async function readState(): Promise<{ lastAgentName?: string; data?: any } | nul
   return json?.state ?? null;
 }
 
-async function patchState(data: Record<string, any>) {
-  const { agentConfig, sessionId } = getAbicHotlineContext();
+async function patchState(sc: SessionCtx, data: Record<string, any>) {
+  const { agentConfig, sessionId } = sc;
   if (!sessionId) return;
   await fetch('/api/state', {
     method: 'POST',
@@ -425,9 +427,9 @@ async function searchTravelDoc(docId: string, query: string) {
   return await res.json();
 }
 
-async function debugLog(event: string, data?: any) {
+async function debugLog(sc: SessionCtx, event: string, data?: any) {
   try {
-    const { agentConfig, sessionId } = getAbicHotlineContext();
+    const { agentConfig, sessionId } = sc;
     await fetch('/api/debug', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -457,20 +459,27 @@ export const abicTravelNextStepTool = tool({
     required: ['userText'],
     additionalProperties: false,
   },
-  execute: async (args: any) => {
+  execute: async (args: any, runContext?: any) => {
     const { userText } = args as { userText: string };
-    await debugLog('input', { userText });
+    const cd = ((runContext?.context as any)?.customData ?? {}) as Record<string, any>;
+    const fallback = getAbicHotlineContext();
+    const sc: SessionCtx = {
+      agentConfig: cd.agentConfig ?? fallback.agentConfig,
+      sessionId  : cd.sessionId  ?? fallback.sessionId,
+    };
+
+    await debugLog(sc, 'input', { userText });
 
     // If the user is asking about pricing/sales, follow happycase: offer transfer (CHAT first).
     if (containsPricingTrigger(userText)) {
-      await debugLog('path', { kind: 'pricing_trigger' });
+      await debugLog(sc, 'path', { kind: 'pricing_trigger' });
       return {
         replyText:
           'Em xin phép chuyển máy đến chuyên viên để tư vấn mức phí chi tiết theo trường hợp của mình. Anh chị có muốn em chuyển máy không ạ? |CHAT',
       };
     }
 
-    const { sessionId } = getAbicHotlineContext();
+    const { sessionId } = sc;
     const debugMode = getDebugB3Mode();
     let forcedState: TravelState | null = null;
     let skipToB3 = false;
@@ -480,33 +489,33 @@ export const abicTravelNextStepTool = tool({
       forcedState = { travelType, offeredWeb: true };
       skipToB3 = true;
       // Ensure state for B3 testing
-      await patchState({ abicTravel: forcedState });
+      await patchState(sc, { abicTravel: forcedState });
       travelStateCache.set(sessionId, forcedState);
-      await debugLog('debug_b3', { travelType });
+      await debugLog(sc, 'debug_b3', { travelType });
     }
 
-    const snapshot = await readState();
+    const snapshot = await readState(sc);
     const cached = sessionId ? travelStateCache.get(sessionId) : undefined;
     const st = (forcedState ?? (snapshot?.data?.abicTravel ?? cached) ?? {}) as TravelState;
-    await debugLog('state', { st });
+    await debugLog(sc, 'state', { st });
 
     // Determine / update travel type if user provides it.
     const typeFromUser = detectTravelTypeFromText(userText);
     const travelType = typeFromUser ?? st.travelType ?? undefined;
     const offeredWeb = Boolean(st.offeredWeb);
-    await debugLog('computed', { typeFromUser, travelType, offeredWeb });
+    await debugLog(sc, 'computed', { typeFromUser, travelType, offeredWeb });
 
     // If state is inconsistent (no travelType but offeredWeb=true), reset offeredWeb
     if (!st.travelType && offeredWeb) {
-      await patchState({ abicTravel: { offeredWeb: false } });
-      await debugLog('patch', { offeredWeb: false, reason: 'inconsistent_state' });
+      await patchState(sc, { abicTravel: { offeredWeb: false } });
+      await debugLog(sc, 'patch', { offeredWeb: false, reason: 'inconsistent_state' });
     }
 
     // If we still don't know travel type, ask B1 (no forward).
     if (!travelType) {
       // IMPORTANT: reset offeredWeb so B2 always happens after B1
-      await patchState({ abicTravel: { travelType: undefined, offeredWeb: false } });
-      await debugLog('path', { kind: 'B1' });
+      await patchState(sc, { abicTravel: { travelType: undefined, offeredWeb: false } });
+      await debugLog(sc, 'path', { kind: 'B1' });
       return {
         replyText: 'Anh chị quan tâm đến bảo hiểm du lịch trong nước hay quốc tế ạ? |CHAT',
       };
@@ -515,8 +524,8 @@ export const abicTravelNextStepTool = tool({
     // If travel type just got set or website not offered yet -> do B2 offer website (happycase).
     const travelTypeChanged = Boolean(typeFromUser && typeFromUser !== st.travelType);
     if (!skipToB3 && (!offeredWeb || travelTypeChanged)) {
-      await patchState({ abicTravel: { travelType, offeredWeb: true } });
-      await debugLog('path', { kind: 'B2', travelType, travelTypeChanged });
+      await patchState(sc, { abicTravel: { travelType, offeredWeb: true } });
+      await debugLog(sc, 'path', { kind: 'B2', travelType, travelTypeChanged });
       return {
         replyText:
           'Anh chị có thể xem chi tiết quyền lợi nhanh chóng trên trang goét A Bích chấm com chấm vi en tại mục “Sản phẩm bảo hiểm”. Anh chị có muốn tự xem trước không ạ? |CHAT',
@@ -527,7 +536,7 @@ export const abicTravelNextStepTool = tool({
     const docScope: AbicTravelDocScope =
       travelType === 'TRAVEL_INTERNATIONAL' ? 'TRAVEL_INTERNATIONAL' : 'TRAVEL_DOMESTIC';
     const scopedDocs = buildDocUsageIndex().filter((d) => d.scope === docScope);
-    // Use BM25 to shortlist, then LLM to choose based on "whenToUse".
+    // Use BM25 to shortlist, then LLM to choose based on “whenToUse”.
     const shortlisted = bm25ScoreDocs(userText, scopedDocs)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
@@ -536,11 +545,11 @@ export const abicTravelNextStepTool = tool({
     const candidates = chosen
       ? [chosen, ...shortlisted.map((d) => d.docId).filter((id) => id !== chosen)]
       : shortlisted.map((d) => d.docId);
-    await debugLog('path', { kind: 'B3', docScope, candidates, chosen });
+    await debugLog(sc, 'path', { kind: 'B3', docScope, candidates, chosen });
 
     for (const docId of candidates) {
       const r = await searchTravelDoc(docId, userText);
-      await debugLog('doc_search', { docId, found: Boolean(r?.found), score: r?.best?.score });
+      await debugLog(sc, 'doc_search', { docId, found: Boolean(r?.found), score: r?.best?.score });
       const spoken = r?.best?.spokenText;
       const raw = r?.best?.rawText;
       if (r?.found && (spoken || raw)) {
@@ -560,7 +569,7 @@ export const abicTravelNextStepTool = tool({
       return { replyText: `${best.doc.content}\n\nAnh chị cần làm rõ thêm thông tin gì không ạ? |CHAT` };
     }
 
-    await debugLog('path', { kind: 'FORWARD_fallback' });
+    await debugLog(sc, 'path', { kind: 'FORWARD_fallback' });
     return {
       replyText: 'Để được tư vấn kỹ hơn về trường hợp của anh chị, em xin phép chuyển máy đến tổng đài viên ạ. |FORWARD',
     };

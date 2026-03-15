@@ -10,8 +10,9 @@ export const getCarebotContextTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async () => {
-    const context = getCarebotRuntimeContext();
+  execute: async (_args: any, runContext?: any) => {
+    const cd = ((runContext?.context as any)?.customData ?? {}) as Record<string, any>;
+    const context = { ...getCarebotRuntimeContext(), ...cd };
     return {
       ok: true,
       context,

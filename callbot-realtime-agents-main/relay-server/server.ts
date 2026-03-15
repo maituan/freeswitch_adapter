@@ -28,17 +28,13 @@ wss.on('connection', (ws, req) => {
   try {
     const raw = p.get('customData')
     if (raw) customData = JSON.parse(raw)
-  } catch {}
+  } catch { }
 
   const opts = {
-    callId     : p.get('callId')    ?? '',
-    scenario   : p.get('scenario')  ?? 'leadgenTNDS',
-    phone      : p.get('phone')     ?? '',
-    leadId     : p.get('leadId')    ?? customData.leadId ?? '',
-    gender     : p.get('gender')    ?? customData.gender ?? '',
-    name       : p.get('name')      ?? customData.name   ?? '',
-    plate      : p.get('plate')     ?? customData.plate  ?? '',
-    voiceId    : p.get('voiceId')   ?? customData.voiceId ?? '',
+    callId: p.get('callId') ?? '',
+    scenario: p.get('scenario') ?? 'leadgenTNDS',
+    phone: p.get('phone') ?? '',
+    voiceId: p.get('voiceId') ?? customData.voiceId ?? '',
     customData,
   }
 
