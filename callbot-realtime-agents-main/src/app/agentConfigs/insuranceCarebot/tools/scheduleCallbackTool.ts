@@ -21,7 +21,7 @@ export const scheduleCallbackTool = tool({
       reason: string;
     };
 
-    const callback = upsertCallbackRecord({ customerId, datetime, reason });
+    const callback = await upsertCallbackRecord({ customerId, datetime, reason });
     return {
       ok: true,
       callback,

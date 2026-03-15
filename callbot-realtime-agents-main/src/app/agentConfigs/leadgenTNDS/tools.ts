@@ -29,7 +29,6 @@ type LeadRecord = {
   updatedAt: string;
 };
 
-const leadStore = new Map<string, LeadRecord>();
 
 const BASE_URL = process.env.BASE_URL ?? ''
 
@@ -57,11 +56,6 @@ function nonEmpty(value?: string): string | undefined {
   return v ? v : undefined;
 }
 
-function getLeadKey(leadId?: string, phoneNumber?: string) {
-  if (leadId) return `lead:${leadId}`;
-  if (phoneNumber) return `phone:${phoneNumber}`;
-  return `lead:${Date.now()}`;
-}
 
 function normalizeGenderValue(raw?: string): string {
   const v = String(raw ?? '')
@@ -179,15 +173,10 @@ export const getLeadContextTool = tool({
         apiLead = data?.lead ?? null;
       }
     } catch {
-      // Ignore API failure and fallback to local memory store below.
+      // Ignore API failure — lead data will be empty.
     }
 
-    const key = getLeadKey(resolvedLeadId, resolvedPhoneNumber);
-    const localLead = leadStore.get(key) ?? null;
-    const record: Record<string, any> = {
-      ...(apiLead ?? {}),
-      ...(localLead ?? {}),
-    };
+    const record: Record<string, any> = { ...(apiLead ?? {}) };
     const overrideGender = nonEmpty(cd.gender) ?? nonEmpty(leadgenRuntimeContext.overrideGender);
     const overrideName   = nonEmpty(cd.name)   ?? nonEmpty(leadgenRuntimeContext.overrideName);
     const overridePlate  = nonEmpty(cd.plate)  ?? nonEmpty(leadgenRuntimeContext.overridePlate);
@@ -212,7 +201,7 @@ export const getLeadContextTool = tool({
       : null;
 
     return {
-      found: Boolean(apiLead || localLead || normalizedLead),
+      found: Boolean(apiLead || normalizedLead),
       lead: normalizedLead,
       openingText: normalizedLead ? buildOpeningText(normalizedLead) : null,
     };
@@ -432,14 +421,20 @@ export const createLeadOrUpdateTool = tool({
   },
   execute: async (args: any) => {
     const record = args as Omit<LeadRecord, 'updatedAt'>;
-    const key = getLeadKey(record.leadId, record.phoneNumber);
-    const updated: LeadRecord = {
-      ...leadStore.get(key),
-      ...record,
-      updatedAt: new Date().toISOString(),
-    };
-    leadStore.set(key, updated);
-    return { ok: true, lead: updated };
+    try {
+      const res = await fetch(`${BASE_URL}/api/leadgen/call-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { ok: true, lead: data.lead };
+      }
+    } catch {
+      // best-effort
+    }
+    return { ok: false };
   },
 });
 

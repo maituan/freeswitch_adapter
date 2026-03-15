@@ -82,7 +82,13 @@ export default function RelayTestPage() {
   }, [])
 
   const connect = useCallback(() => {
-    const params = new URLSearchParams({ scenario, phone, leadId, gender, name, plate })
+    const customData: Record<string, string> = {}
+    if (leadId) customData.leadId = leadId
+    if (gender) customData.gender = gender
+    if (name)   customData.name   = name
+    if (plate)  customData.plate  = plate
+    const params = new URLSearchParams({ scenario, phone })
+    if (Object.keys(customData).length) params.set('customData', JSON.stringify(customData))
     if (apiKey) params.set('apiKey', apiKey)
     const url = `${relayUrl}/?${params}`
     addEvent('sys', 'connecting', { url })

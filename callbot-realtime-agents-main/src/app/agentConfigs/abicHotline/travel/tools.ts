@@ -361,8 +361,6 @@ type TravelState = {
   offeredWeb?: boolean;
 };
 
-const travelStateCache = new Map<string, TravelState>();
-
 function getDebugB3Mode(): 'international' | 'domestic' | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -411,10 +409,6 @@ async function patchState(sc: SessionCtx, data: Record<string, any>) {
     body: JSON.stringify({ agentConfig, sessionId, data }),
   });
 
-  // Keep a best-effort local cache to avoid losing flow if state fetch fails.
-  const current = travelStateCache.get(sessionId) ?? {};
-  const next = { ...current, ...(data?.abicTravel ?? {}) };
-  travelStateCache.set(sessionId, next);
 }
 
 async function searchTravelDoc(docId: string, query: string) {
@@ -490,13 +484,11 @@ export const abicTravelNextStepTool = tool({
       skipToB3 = true;
       // Ensure state for B3 testing
       await patchState(sc, { abicTravel: forcedState });
-      travelStateCache.set(sessionId, forcedState);
       await debugLog(sc, 'debug_b3', { travelType });
     }
 
     const snapshot = await readState(sc);
-    const cached = sessionId ? travelStateCache.get(sessionId) : undefined;
-    const st = (forcedState ?? (snapshot?.data?.abicTravel ?? cached) ?? {}) as TravelState;
+    const st = (forcedState ?? snapshot?.data?.abicTravel ?? {}) as TravelState;
     await debugLog(sc, 'state', { st });
 
     // Determine / update travel type if user provides it.

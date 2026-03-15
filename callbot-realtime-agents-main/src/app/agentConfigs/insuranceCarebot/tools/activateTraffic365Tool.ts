@@ -19,7 +19,7 @@ export const activateTraffic365Tool = tool({
       sendGuideVia?: 'zalo' | 'sms';
     };
 
-    const activation = upsertActivationRecord(customerId);
+    const activation = await upsertActivationRecord(customerId);
     return {
       ok: true,
       activation,

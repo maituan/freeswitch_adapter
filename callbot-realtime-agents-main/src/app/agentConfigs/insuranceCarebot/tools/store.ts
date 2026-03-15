@@ -13,37 +13,51 @@ type ActivationRecord = {
   activatedAt: string;
 };
 
-const crmStore = new Map<string, CarebotCallResult>();
-const callbackStore = new Map<string, CallbackRecord>();
-const activationStore = new Map<string, ActivationRecord>();
+const BASE = '/api/carebot/store';
 
-export function upsertCrmRecord(record: CarebotCallResult) {
-  crmStore.set(record.customerId, record);
+export async function upsertCrmRecord(record: CarebotCallResult): Promise<void> {
+  await fetch(BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'crm', record }),
+  });
 }
 
-export function upsertCallbackRecord(record: Omit<CallbackRecord, 'createdAt'>) {
-  const next: CallbackRecord = {
-    ...record,
-    createdAt: new Date().toISOString(),
-  };
-  callbackStore.set(record.customerId, next);
-  return next;
+export async function upsertCallbackRecord(
+  record: Omit<CallbackRecord, 'createdAt'>,
+): Promise<CallbackRecord> {
+  const res = await fetch(BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'callback', ...record }),
+  });
+  const json = await res.json();
+  return json.record as CallbackRecord;
 }
 
-export function upsertActivationRecord(customerId: string, activated = true) {
-  const next: ActivationRecord = {
-    customerId,
-    activated,
-    activatedAt: new Date().toISOString(),
-  };
-  activationStore.set(customerId, next);
-  return next;
+export async function upsertActivationRecord(
+  customerId: string,
+  activated = true,
+): Promise<ActivationRecord> {
+  const res = await fetch(BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'activation', customerId, activated }),
+  });
+  const json = await res.json();
+  return json.record as ActivationRecord;
 }
 
-export function getCarebotStoreSnapshot() {
+export async function getCarebotStoreSnapshot(): Promise<{
+  crmRecords: CarebotCallResult[];
+  callbacks: CallbackRecord[];
+  activations: ActivationRecord[];
+}> {
+  const res = await fetch(BASE);
+  const json = await res.json();
   return {
-    crmRecords: Array.from(crmStore.values()),
-    callbacks: Array.from(callbackStore.values()),
-    activations: Array.from(activationStore.values()),
+    crmRecords: json.crmRecords ?? [],
+    callbacks: json.callbacks ?? [],
+    activations: json.activations ?? [],
   };
 }

@@ -36,7 +36,7 @@ export const crmUpdateTool = tool({
       nextAction,
       structuredNotes,
     });
-    upsertCrmRecord(record);
+    await upsertCrmRecord(record);
 
     return {
       ok: true,
