@@ -9,7 +9,6 @@ import {
   type DiscountRate,
   type PriceRow,
 } from './pricingData';
-import { tndsFaqItems } from './faqData';
 
 type LeadRecord = {
   leadId?: string;
@@ -317,62 +316,15 @@ export const lookupTndsFaqTool = tool({
   },
   execute: async (args: any) => {
     const { question } = args as { question: string };
-    const normalizeForLookup = (text: string) =>
-      String(text || '')
-        .toLowerCase()
-        .replace(/đ/g, 'd')
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const q = normalizeForLookup(question);
-
-    // Fast-path for "which insurance company" variants.
-    const isCompanyQuestion =
-      q.includes('bao hiem nao') ||
-      q.includes('ben bao hiem nao') ||
-      q.includes('em o ben bao hiem nao');
-    if (isCompanyQuestion) {
-      const company = tndsFaqItems.find((it) => it.id === 'faq-company-name');
-      if (company) return { found: true, faq: company };
-    }
-
-    // Fast-path for common "about us / where are you" variants.
-    const isWhereQuestion =
-      q.includes('em o dau') ||
-      q.includes('em ben nao') ||
-      q.includes('ben nao') ||
-      q.includes('em la ai') ||
-      q.includes('bao hiem gi');
-    if (isWhereQuestion) {
-      const about = tndsFaqItems.find((it) => it.id === 'faq-where');
-      if (about) return { found: true, faq: about };
-    }
-
-    const exact = tndsFaqItems.find(
-      (it) => {
-        const iq = normalizeForLookup(it.question);
-        return q.includes(iq) || iq.includes(q);
-      },
-    );
-    if (exact) {
-      return { found: true, faq: exact };
-    }
-    const scored = tndsFaqItems.map((it) => {
-      let score = 0;
-      for (const kw of it.keywords) {
-        const nkw = normalizeForLookup(kw);
-        if (nkw && q.includes(nkw)) score += 2;
-      }
-      const cat = normalizeForLookup(it.category);
-      if (cat && q.includes(cat)) score += 1;
-      return { it, score };
-    });
-    const best = scored.sort((a, b) => b.score - a.score)[0];
-    if (best && best.score > 0) {
-      return { found: true, faq: best.it };
+    try {
+      const res = await fetch(`${BASE_URL}/api/leadgen/faq/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // best-effort fallback
     }
     return {
       found: false,

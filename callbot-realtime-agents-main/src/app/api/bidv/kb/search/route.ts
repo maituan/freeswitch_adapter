@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { bidvKbItems } from '@/app/agentConfigs/bidvBot/sampleData';
+import { readKbItems, seedIfEmpty } from '@/app/lib/kbReader';
 
 export const runtime = 'nodejs';
 
@@ -38,18 +39,26 @@ function l2Norm(v: number[]) {
   return Math.sqrt(sum);
 }
 
+type BidvKbItem = {
+  id: string;
+  scenario: Scenario;
+  cause: string;
+  guidance: string;
+  keywords: string[];
+  steps?: Array<{ kind: string; text: string }>;
+};
+
+async function loadKbItems(): Promise<BidvKbItem[]> {
+  await seedIfEmpty('bidvBot', 'procedures', bidvKbItems as Array<{ id: string; [k: string]: unknown }>);
+  const items = await readKbItems<BidvKbItem>('bidvBot', 'procedures');
+  return items.length ? items : (bidvKbItems as BidvKbItem[]);
+}
+
 async function ensureIndex(openai: OpenAI) {
   const model = process.env.BIDV_KB_EMBEDDING_MODEL || 'text-embedding-3-large';
   if (cache?.model === model && cache.docsByScenario?.SMARTBANKING_LOGIN?.length) return cache;
 
-  const items = bidvKbItems as Array<{
-    id: string;
-    scenario: Scenario;
-    cause: string;
-    guidance: string;
-    keywords: string[];
-    steps?: Array<{ kind: string; text: string }>;
-  }>;
+  const items = await loadKbItems();
 
   const toDocText = (it: (typeof items)[number]) =>
     [

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { readKbDocument, seedDocsIfMissing } from '@/app/lib/kbReader';
 
 export const runtime = 'nodejs';
 
@@ -125,24 +126,46 @@ function bm25Score(query: string, docs: ChunkDoc[]) {
   });
 }
 
+const ALLOWED_DOC_IDS: DocId[] = ['2399', '2400', '2401', '2402', '2403', '2404'];
+
+async function ensureSeedDocs() {
+  const sourcePath = path.join(
+    process.cwd(),
+    'src/app/agentConfigs/abicHotline/travel/knowledge',
+  );
+  const docs: Record<string, string> = {};
+  for (const docId of ALLOWED_DOC_IDS) {
+    try {
+      docs[docId] = await fs.readFile(path.join(sourcePath, `${docId}.md`), 'utf8');
+    } catch {
+      // skip if source not found
+    }
+  }
+  if (Object.keys(docs).length) {
+    await seedDocsIfMissing('abicHotline', 'travel_docs', docs);
+  }
+}
+
+let seedDone = false;
+
 async function ensureDocIndex(docId: DocId) {
   const cached = cache.get(docId);
   if (cached?.chunks?.length) return cached;
 
-  const indexPath = path.join(
-    process.cwd(),
-    'src/app/agentConfigs/abicHotline/travel/knowledge/index',
-    `${docId}.json`,
-  );
+  if (!seedDone) {
+    await ensureSeedDocs();
+    seedDone = true;
+  }
+
   try {
-    const raw = await fs.readFile(indexPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    const chunks = Array.isArray(parsed?.chunks) ? parsed.chunks : [];
-    const built: CachedDocIndex = { docId, chunks, builtAt: Date.now() };
+    const md = await readKbDocument('abicHotline', 'travel_docs', docId);
+    const chunks = splitIntoChunks(md, 1100);
+    const indexed = buildIndexForChunks(chunks);
+    const built: CachedDocIndex = { docId, chunks: indexed, builtAt: Date.now() };
     cache.set(docId, built);
     return built;
   } catch {
-    // Fallback to raw markdown if index not built yet
+    // Fallback to original source path if data/kb not seeded yet
     const docPath = path.join(
       process.cwd(),
       'src/app/agentConfigs/abicHotline/travel/knowledge',

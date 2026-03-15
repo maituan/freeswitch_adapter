@@ -1,19 +1,8 @@
 import { tool } from '@openai/agents/realtime';
-import { abicTravelKbItems, type AbicTravelKbItem, type AbicTravelScope } from './travelKb';
+import { type AbicTravelScope } from './travelKb';
 import { abicTravelDocs, type AbicTravelDocScope } from './knowledgeSources';
 
 type AbicToolScope = AbicTravelScope | 'AUTO';
-
-type DocIndex = {
-  id: string;
-  scope: AbicTravelScope;
-  title: string;
-  content: string;
-  source: string;
-  keywords: string[];
-  tf: Record<string, number>;
-  len: number;
-};
 
 function normalizeForSearch(s: string) {
   return s
@@ -29,79 +18,6 @@ function tokenize(s: string) {
   const n = normalizeForSearch(s);
   if (!n) return [];
   return n.split(' ').filter(Boolean);
-}
-
-function buildDocIndex(items: AbicTravelKbItem[]): DocIndex[] {
-  return items.map((it) => {
-    const text = `${it.title} ${it.content} ${it.keywords.join(' ')}`.trim();
-    const tokens = tokenize(text);
-    const tf: Record<string, number> = {};
-    for (const t of tokens) tf[t] = (tf[t] ?? 0) + 1;
-    return {
-      id: it.id,
-      scope: it.scope,
-      title: it.title,
-      content: it.content,
-      source: it.source,
-      keywords: it.keywords,
-      tf,
-      len: tokens.length,
-    };
-  });
-}
-
-function computeIdf(docs: DocIndex[]) {
-  const df: Record<string, number> = {};
-  for (const d of docs) {
-    for (const term of Object.keys(d.tf)) df[term] = (df[term] ?? 0) + 1;
-  }
-  const N = docs.length || 1;
-  const idf: Record<string, number> = {};
-  for (const [term, n] of Object.entries(df)) {
-    idf[term] = Math.log(1 + (N - n + 0.5) / (n + 0.5));
-  }
-  return idf;
-}
-
-function bm25Score(query: string, docs: DocIndex[]) {
-  const qTokens = tokenize(query);
-  const idf = computeIdf(docs);
-  const avgdl = docs.reduce((sum, d) => sum + d.len, 0) / (docs.length || 1);
-  const k1 = 1.5;
-  const b = 0.75;
-
-  const qSet = Array.from(new Set(qTokens));
-  return docs.map((d) => {
-    let score = 0;
-    for (const term of qSet) {
-      const tf = d.tf[term] ?? 0;
-      if (!tf) continue;
-      const termIdf = idf[term] ?? 0;
-      const denom = tf + k1 * (1 - b + b * (d.len / (avgdl || 1)));
-      score += termIdf * ((tf * (k1 + 1)) / (denom || 1));
-    }
-
-    // keyword phrase boost
-    const nq = normalizeForSearch(query);
-    for (const kw of d.keywords) {
-      const nkw = normalizeForSearch(kw);
-      if (!nkw) continue;
-      if (nq.includes(nkw)) score += nkw.includes(' ') ? 4 : 2;
-    }
-
-    return { doc: d, score };
-  });
-}
-
-function autoScopeHint(query: string): AbicTravelScope {
-  const q = normalizeForSearch(query);
-  if (/(tre chuyen|tri hoan|delay|cham chuyen|san bay|may bay|hang van chuyen|the len may bay)/.test(q)) {
-    return 'TRAVEL_FLIGHT';
-  }
-  if (/(quoc te|ra nuoc ngoai|visa|schengen|chau au)/.test(q)) {
-    return 'TRAVEL_INTERNATIONAL';
-  }
-  return 'TRAVEL_DOMESTIC';
 }
 
 export const lookupAbicTravelKBTool = tool({
@@ -125,41 +41,20 @@ export const lookupAbicTravelKBTool = tool({
   execute: async (args: any) => {
     const { query, productScope } = args as { query: string; productScope: AbicToolScope; topK?: number };
     const topK = Math.max(1, Math.min(5, Number(args?.topK ?? 3)));
-    const inferred = productScope === 'AUTO' ? autoScopeHint(query) : productScope;
-
-    const pool = abicTravelKbItems.filter((i) => i.scope === inferred);
-    const docs = buildDocIndex(pool.length ? pool : abicTravelKbItems);
-    const ranked = bm25Score(query, docs).sort((a, b) => b.score - a.score).slice(0, topK);
-    const best = ranked[0];
-
-    if (!best || (best.score ?? 0) <= 0) {
-      return {
-        found: false,
-        scopeUsed: inferred,
-        message: 'Để được tư vấn kỹ hơn về trường hợp của anh chị, em xin phép chuyển máy đến tổng đài viên ạ.',
-        tag: '|FORWARD',
-      };
+    try {
+      const res = await fetch('/api/abic/travel/kb/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, productScope, topK }),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // best-effort fallback
     }
-
     return {
-      found: true,
-      scopeUsed: inferred,
-      best: {
-        id: best.doc.id,
-        scope: best.doc.scope,
-        title: best.doc.title,
-        content: best.doc.content,
-        source: best.doc.source,
-        score: best.score,
-      },
-      top: ranked.map((r) => ({
-        id: r.doc.id,
-        scope: r.doc.scope,
-        title: r.doc.title,
-        content: r.doc.content,
-        source: r.doc.source,
-        score: r.score,
-      })),
+      found: false,
+      message: 'Để được tư vấn kỹ hơn về trường hợp của anh chị, em xin phép chuyển máy đến tổng đài viên ạ.',
+      tag: '|FORWARD',
     };
   },
 });
@@ -549,14 +444,21 @@ export const abicTravelNextStepTool = tool({
       }
     }
 
-    // Fallback: minimal Phase-1 KB items (happycase subset).
-    const inferred = autoScopeHint(userText);
-    const pool = abicTravelKbItems.filter((i) => i.scope === inferred);
-    const docs = buildDocIndex(pool.length ? pool : abicTravelKbItems);
-    const ranked = bm25Score(userText, docs).sort((a, b) => b.score - a.score).slice(0, 1);
-    const best = ranked[0];
-    if (best?.doc?.content) {
-      return { replyText: `${best.doc.content}\n\nAnh chị cần làm rõ thêm thông tin gì không ạ? |CHAT` };
+    // Fallback: Phase-1 KB items search via API.
+    try {
+      const kbRes = await fetch('/api/abic/travel/kb/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: userText, productScope: 'AUTO', topK: 1 }),
+      });
+      if (kbRes.ok) {
+        const kbData = await kbRes.json();
+        if (kbData?.found && kbData?.best?.content) {
+          return { replyText: `${kbData.best.content}\n\nAnh chị cần làm rõ thêm thông tin gì không ạ? |CHAT` };
+        }
+      }
+    } catch {
+      // ignore
     }
 
     await debugLog(sc, 'path', { kind: 'FORWARD_fallback' });
