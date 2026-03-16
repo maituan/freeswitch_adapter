@@ -65,6 +65,8 @@ services:
       - BASE_URL=http://localhost:3000
       - ASR_PROXY_URL=ws://localhost:8086
       - TTS_WEBSOCKET_URI=${TTS_WEBSOCKET_URI:-ws://103.253.20.27:8765}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-localhost:9092}
+      - KAFKA_CALL_HISTORY_TOPIC=${KAFKA_CALL_HISTORY_TOPIC:-call-history}
     command: ["npm", "run", "relay"]
     depends_on:
       - callbot-agents
@@ -98,6 +100,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
+      - SERVER_PORT=8090
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=localhost:9092
     depends_on:
