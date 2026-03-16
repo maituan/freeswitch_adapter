@@ -295,9 +295,10 @@ func handleAnswer(ev *eventsocket.Event) {
 				// trễ nhỏ để đảm bảo jitter buffer/playback của
 				// FreeSWITCH/PSTN đã xả hết audio.
 				if sess.GetStatus() == "pending_hangup" {
-					log.Printf("[AudioOut] FIFO closed with pending_hangup, will end call after grace period uuid=%s", uuid)
-					time.Sleep(500 * time.Millisecond)
-					esl.EndCall(uuid)
+					// Don't kill here — wait for PLAYBACK_STOP from FreeSWITCH
+					// so the caller hears the full audio before the call ends.
+					// handlePlaybackStop will call uuid_kill when playback is done.
+					log.Printf("[AudioOut] FIFO closed with pending_hangup, waiting for PLAYBACK_STOP uuid=%s", uuid)
 				}
 				continue
 			}
@@ -365,8 +366,10 @@ func handleAnswer(ev *eventsocket.Event) {
 						log.Printf("[Relay] endcall command (mark pending_hangup) uuid=%s", uuid)
 						sess.UpdateStatus("pending_hangup")
 					case "transfer":
-						log.Printf("[Relay] transfer command uuid=%s ext=%s", uuid, msg.Ext)
-						esl.EndCall(uuid) // TODO: implement SIP transfer
+						log.Printf("[Relay] transfer command (mark pending_hangup) uuid=%s ext=%s", uuid, msg.Ext)
+						// TODO: implement actual SIP transfer using msg.Ext
+						// For now, end the call after audio finishes (same as endcall).
+						sess.UpdateStatus("pending_hangup")
 					}
 				}
 			},
@@ -438,11 +441,19 @@ func handlePlaybackStop(ev *eventsocket.Event) {
 	if sess == nil {
 		return
 	}
-	log.Printf("[Call] PLAYBACK_STOP forwarding to relay uuid=%s", uuid)
+	log.Printf("[Call] PLAYBACK_STOP uuid=%s status=%s", uuid, sess.GetStatus())
+	// Notify relay so it can unmute ASR / trigger its own endcall cleanup.
 	sess.SendToRelay(relay.ControlMsg{
 		Type:      "event",
 		EventName: "playback_stop",
 	})
+	// If the bot requested endcall, hang up now that FreeSWITCH has finished
+	// playing the last TTS utterance. This replaces the old timer-based kill
+	// in the FIFO writer which was too early (FIFO EOF ≠ playback complete).
+	if sess.GetStatus() == "pending_hangup" {
+		log.Printf("[Call] PLAYBACK_STOP with pending_hangup, ending call uuid=%s", uuid)
+		esl.EndCall(uuid)
+	}
 }
 
 type callRequest struct {

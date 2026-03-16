@@ -1,5 +1,23 @@
 services:
 
+  # Go FreeSWITCH bridge — port 8083
+  callbot-bridge:
+    build:
+      context: ../freeswitch-openai-bridge
+      dockerfile: Dockerfile
+    image: callbot-bridge:latest
+    container_name: callbot-bridge
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /dev/shm/bridge:/dev/shm/bridge
+    environment:
+      - FS_HOST=${FS_HOST:-127.0.0.1:8021}
+      - FS_PASSWORD=${FS_PASSWORD:-ClueCon}
+      - FS_DOMAIN=${FS_DOMAIN:-}
+      - RELAY_URL=${RELAY_URL:-ws://localhost:8091}
+      - RELAY_API_KEY=${RELAY_API_KEY:-}
+
   # Next.js web UI + API routes — port 3000
   callbot-agents:
     build:
@@ -12,7 +30,7 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NEXT_PUBLIC_OPENAI_MODEL=${NEXT_PUBLIC_OPENAI_MODEL:-gpt-4o-mini-realtime-preview}
-      - BRIDGE_URL=http://101.99.3.216:8083
+      - BRIDGE_URL=http://localhost:8083
     command: ["npm", "run", "start"]
 
   # Viettel ASR gRPC → WebSocket proxy — port 8082
@@ -52,19 +70,6 @@ services:
       - callbot-agents
       - callbot-asr-proxy
 
-  # Postgres cho lịch sử cuộc gọi / console
-  callbot-postgres:
-    image: postgres:16
-    container_name: callbot-postgres
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-callbot}
-      - POSTGRES_USER=${POSTGRES_USER:-callbot}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-callbot}
-    volumes:
-      - callbot-postgres-data:/var/lib/postgresql/data
-
   # Kafka single-node cho call history (KRaft mode)
   callbot-kafka:
     image: apache/kafka:latest
@@ -86,44 +91,16 @@ services:
     volumes:
       - callbot-kafka-data:/var/lib/kafka/data
 
-  # CallBot Console - UI quản lý gọi lẻ, chiến dịch, lịch sử
-  callbot-console:
-    build:
-      context: ../callbot-console
-      dockerfile: Dockerfile
-    image: callbot-console:latest
-    container_name: callbot-console
+  # Kafka UI — port 8090
+  callbot-kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: callbot-kafka-ui
     restart: unless-stopped
     network_mode: host
     environment:
-      - PORT=${CALLBOT_CONSOLE_PORT:-3100}
-      - BRIDGE_URL=http://101.99.3.216:8083
-      - DATABASE_URL=${DATABASE_URL:-postgres://callbot:callbot@localhost:5432/callbot}
-      - KAFKA_BROKERS=localhost:9092
-      - KAFKA_CALL_HISTORY_TOPIC=call_history
-      - KAFKA_CLIENT_ID=callbot-console
-    command: ["npm", "run", "start"]
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=localhost:9092
     depends_on:
-      - callbot-postgres
-      - callbot-kafka
-
-  # Kafka consumer cho call-history (có thể tách nếu muốn)
-  callbot-console-consumer:
-    build:
-      context: ../callbot-console
-      dockerfile: Dockerfile
-    image: callbot-console:latest
-    container_name: callbot-console-consumer
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://callbot:callbot@localhost:5432/callbot}
-      - KAFKA_BROKERS=localhost:9092
-      - KAFKA_CALL_HISTORY_TOPIC=call_history
-      - KAFKA_CLIENT_ID=callbot-console
-    command: ["npm", "run", "kafka:consumer"]
-    depends_on:
-      - callbot-postgres
       - callbot-kafka
 
 volumes:

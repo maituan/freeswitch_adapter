@@ -36,6 +36,9 @@ export class CallSession {
   private asrClient: AsrClient | null = null
   private playbackMuteTimer: ReturnType<typeof setTimeout> | null = null
   private isPlayingAudio = false
+  // True while OpenAI is generating a response. ASR transcripts are suppressed
+  // during this window so they don't cancel an in-progress response.
+  private isProcessing = false
   private pendingEndcall = false
   private endcallFallbackTimer: ReturnType<typeof setTimeout> | null = null
   private history: CallHistoryMessage[] = []
@@ -73,12 +76,21 @@ export class CallSession {
 
     const cd = this.opts.customData ?? {}
 
-    // 1. Create OpenAI Realtime session — text-only mode, no audio to OpenAI
+    // 1. Create OpenAI Realtime session.
+    //    We use text-only input (ASR → text → OpenAI) so turn_detection and
+    //    input_audio_transcription are disabled via providerData to avoid
+    //    model errors (semantic_vad and gpt-4o-mini-transcribe are not
+    //    supported by all realtime models). Audio output drives external TTS.
     this.realtimeSession = new RealtimeSession(agents[0], {
       transport: 'websocket',
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini-realtime-preview',
       config: {
-        modalities: ['text'],
+        // Override SDK defaults that cause status=failed on gpt-4o-mini-realtime-preview.
+        // providerData is spread last so it overrides the computed defaults.
+        providerData: {
+          turn_detection: null,
+          input_audio_transcription: null,
+        },
       },
       context: { phone: this.opts.phone, leadId: cd.leadId, customData: cd },
     })
@@ -112,7 +124,7 @@ export class CallSession {
       const history: any[] = ctx?.context?.history ?? []
       const call = [...history].reverse().find((c: any) => c?.type === 'function_call' && c?.name === functionCall?.name)
       const name = call?.name ?? functionCall?.name
-      console.log(`[Session] agent_tool_start tool=${name}`)
+      console.log(`[Session] agent_tool_start tool=${name} args=${JSON.stringify(call?.arguments ?? functionCall?.arguments).substring(0, 200)}`)
       this.sendEvent('client', 'tool_start', {
         name,
         args: call?.arguments ?? functionCall?.arguments,
@@ -123,7 +135,8 @@ export class CallSession {
       const history: any[] = ctx?.context?.history ?? []
       const call = [...history].reverse().find((c: any) => c?.type === 'function_call' && c?.name === functionCall?.name)
       const name = call?.name ?? functionCall?.name
-      console.log(`[Session] agent_tool_end tool=${name}`)
+      const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
+      console.log(`[Session] agent_tool_end tool=${name} result=${resultStr.substring(0, 300)}`)
       this.sendEvent('client', 'tool_end', {
         name,
         result: typeof result === 'string' ? tryParseJson(result) : result,
@@ -141,7 +154,21 @@ export class CallSession {
     this.realtimeSession.on('transport_event', (event: any) => {
       // Skip raw audio delta events — they're too noisy and binary
       if (event?.type === 'response.audio.delta' || event?.type === 'input_audio_buffer.append') return
-      console.log(`[Session] transport_event type=${event?.type ?? 'unknown'}`)
+      // Track response lifecycle to block ASR transcripts during generation
+      if (event?.type === 'response.created') {
+        this.isProcessing = true
+        console.log('[Session] transport_event type=response.created → isProcessing=true')
+      } else if (event?.type === 'response.done') {
+        this.isProcessing = false
+        const r = event?.response ?? {}
+        const output = r.output ?? []
+        const details = r.status_details ? JSON.stringify(r.status_details).substring(0, 300) : 'null'
+        console.log(`[Session] transport_event type=response.done → isProcessing=false status=${r.status} statusDetails=${details} outputCount=${output.length} inputTokens=${r.usage?.input_tokens ?? 0} outputTokens=${r.usage?.output_tokens ?? 0} output=${JSON.stringify(output).substring(0, 500)}`)
+      } else if (event?.type === 'error') {
+        console.error(`[Session] transport_event type=error`, JSON.stringify(event).substring(0, 500))
+      } else {
+        console.log(`[Session] transport_event type=${event?.type ?? 'unknown'}`)
+      }
       this.sendEvent('server', event?.type ?? 'transport_event', event)
     })
 
@@ -150,7 +177,7 @@ export class CallSession {
       const text = stripControlTags(rawText)
       const cmd  = extractControlCommand(rawText)
 
-      console.log(`[Session] agent_end text="${text.substring(0, 80)}" cmd=${cmd?.action ?? 'none'}`)
+      console.log(`[Session] agent_end rawText="${rawText.substring(0, 200)}" text="${text.substring(0, 80)}" cmd=${cmd?.action ?? 'none'}`)
       this.sendEvent('server', 'agent_end', { rawText, text })
 
       if (text.trim()) {
@@ -206,8 +233,13 @@ export class CallSession {
     this.asrClient.onTranscript((transcript, isFinal) => {
       this.sendEvent('client', 'asr_transcript', { transcript, isFinal })
       if (isFinal && transcript.trim()) {
+        if (this.isProcessing || this.isPlayingAudio) {
+          console.log(`[Session] asr_transcript suppressed (isProcessing=${this.isProcessing} isPlayingAudio=${this.isPlayingAudio}) text="${transcript.trim().substring(0, 80)}"`)
+          return
+        }
         const text = transcript.trim()
         this.addUserMessage(text, transcript)
+        this.isProcessing = true
         this.realtimeSession?.sendMessage(text)
         this.sendEvent('client', 'send_message', { text })
       }
@@ -216,6 +248,7 @@ export class CallSession {
     this.ws.send(JSON.stringify({ type: 'ready' }))
 
     // 7. Trigger agent to speak first (no user message needed)
+    this.isProcessing = true
     this.realtimeSession.transport.sendEvent({ type: 'response.create' } as any)
 
     // 8. Incoming binary audio → forward to ASR proxy (skip while muted during playback)
