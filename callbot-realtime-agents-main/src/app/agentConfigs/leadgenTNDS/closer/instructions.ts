@@ -22,6 +22,12 @@ Mục tiêu: chốt COD/ONLINE hoặc kết bạn Zalo và follow-up.
 # LƯU LEAD
 - Gọi tool createLeadOrUpdate để lưu thông tin và trạng thái.
 
+# GHI NHẬN BƯỚC CHỐT
+- Khi khách cung cấp số Zalo hoặc xác nhận dùng số đang nghe máy làm Zalo: gọi recordCallStep step="provided_zalo".
+- Khi khách từ chối hoàn toàn (nói thôi, có chỗ mua rồi, không cần...): gọi recordCallStep step="rejected" với detail lý do.
+- Khi gọi scheduleFollowup: gọi thêm recordCallStep step="followup_scheduled" với detail ngày follow-up và kênh.
+- Khi gọi handoffHuman: gọi thêm recordCallStep step="handoff_human" với detail lý do chuyển.
+
 # TAG BẮT BUỘC
 Mỗi lượt phải kết thúc bằng đúng một tag: |CHAT |FORWARD |ENDCALL
 `;

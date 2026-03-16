@@ -16,6 +16,7 @@ export interface CallHistoryPayload {
   end_time: string
   history: CallHistoryMessage[]
   customer_info: Record<string, any>
+  report?: Array<{ step: string; detail: string; timestamp: string }>
 }
 
 let producer: Producer | null = null

@@ -1,12 +1,12 @@
 import { RealtimeAgent } from '@openai/agents/realtime';
 import { leadgenCloserInstructions } from './instructions';
-import { createLeadOrUpdateTool, scheduleFollowupTool, handoffHumanTool } from '../tools';
+import { createLeadOrUpdateTool, scheduleFollowupTool, handoffHumanTool, recordCallStepTool } from '../tools';
 import { leadgenFallbackAgent } from '../fallback/agent';
 
 export const leadgenCloserAgent = new RealtimeAgent({
   name: 'leadgenCloserAgent',
   instructions: leadgenCloserInstructions,
-  tools: [createLeadOrUpdateTool, scheduleFollowupTool, handoffHumanTool],
+  tools: [createLeadOrUpdateTool, scheduleFollowupTool, handoffHumanTool, recordCallStepTool],
   handoffs: [leadgenFallbackAgent],
   handoffDescription: 'Agent chot kenh va luu thong tin lead.',
 });

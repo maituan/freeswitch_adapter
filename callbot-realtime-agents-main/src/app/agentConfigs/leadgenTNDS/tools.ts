@@ -421,3 +421,40 @@ export const handoffHumanTool = tool({
     };
   },
 });
+
+export const recordCallStepTool = tool({
+  name: 'recordCallStep',
+  description: 'Ghi lai buoc dong y / tu choi / cung cap thong tin cua khach. Goi ngay khi khach dong y gia, cung cap Zalo, tu choi mua.',
+  parameters: {
+    type: 'object',
+    properties: {
+      step: {
+        type: 'string',
+        enum: ['agreed_price', 'provided_zalo', 'rejected', 'followup_scheduled', 'handoff_human', 'other'],
+      },
+      detail: { type: 'string', description: 'Mo ta ngan ve buoc nay' },
+    },
+    required: ['step'],
+    additionalProperties: false,
+  },
+  execute: async (args: any, runContext?: any) => {
+    const { step, detail } = args as { step: string; detail?: string };
+    const ctx = (runContext?.context ?? {}) as Record<string, any>;
+
+    if (!Array.isArray(ctx._report)) ctx._report = [];
+    const entry = { step, detail: detail ?? '', timestamp: new Date().toISOString() };
+    ctx._report.push(entry);
+
+    try {
+      await fetch(`${BASE_URL}/api/leadgen/report-step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...entry, callId: ctx.callId, phone: ctx.phone }),
+      });
+    } catch {
+      // best-effort
+    }
+
+    return { ok: true, recorded: entry };
+  },
+});

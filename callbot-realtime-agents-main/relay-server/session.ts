@@ -354,6 +354,8 @@ export class CallSession {
     const callId = this.opts.callId || this.opts.phone || cd.leadId || ''
     if (!callId || !this.history.length) return
 
+    const report = (this.realtimeSession as any)?.context?.context?._report ?? undefined
+
     const payload: CallHistoryPayload = {
       call_id: this.opts.callId || '',
       scenario: this.opts.scenario,
@@ -362,6 +364,7 @@ export class CallSession {
       end_time: (this.endTime || new Date()).toISOString(),
       history: this.history,
       customer_info: { ...cd },
+      ...(report ? { report } : {}),
     }
 
     await sendCallHistory(callId, payload)

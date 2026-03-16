@@ -54,7 +54,7 @@ func (es *EventSocket) Originate(target, callerID, callBotId, scenario string) (
 	}
 
 	cmd := fmt.Sprintf(
-		"originate {callbot_bridge=true,origination_caller_id_number=%s,ignore_early_media=true,absolute_codec_string=PCMU@8000h@20i}%s &park",
+		"originate {callbot_bridge=true,origination_caller_id_number=%s,ignore_early_media=true}%s &park",
 		callerID,
 		endpoint,
 	)
