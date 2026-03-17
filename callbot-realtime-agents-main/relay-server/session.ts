@@ -252,8 +252,15 @@ export class CallSession {
     //    the partner picks up (avoids 4s silence timeout on partner PBX).
 
     // 8. Incoming binary audio → forward to ASR proxy (skip while muted during playback)
+    let audioChunksReceived = 0
     this.ws.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
       if (isBinary) {
+        audioChunksReceived++
+        if (audioChunksReceived === 1) {
+          console.log(`[Session] first audio chunk received from bridge callId=${this.opts.callId}`)
+        } else if (audioChunksReceived % 500 === 0) {
+          console.log(`[Session] audio chunks received callId=${this.opts.callId} total=${audioChunksReceived} (~${Math.round(audioChunksReceived / 50)}s)`)
+        }
         if (MUTE_DURING_PLAYBACK && this.isPlayingAudio) return
         this.asrClient?.sendAudio(data as Buffer)
       } else {

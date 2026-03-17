@@ -53,6 +53,8 @@ type preCallData struct {
 func prewarmRelay(callUUID, scenario, phone, voiceID string, customData map[string]interface{}) chan *relay.Client {
 	ch := make(chan *relay.Client, 1)
 	go func() {
+		log.Printf("[Relay] pre-warm start uuid=%s scenario=%s", callUUID, scenario)
+		start := time.Now()
 		rc, err := relay.Connect(relay.ConnectParams{
 			RelayURL:   cfg.Relay.URL,
 			CallID:     callUUID,
@@ -63,11 +65,11 @@ func prewarmRelay(callUUID, scenario, phone, voiceID string, customData map[stri
 			CustomData: customData,
 		})
 		if err != nil {
-			log.Printf("[Relay] pre-warm failed uuid=%s: %v", callUUID, err)
+			log.Printf("[Relay] pre-warm failed uuid=%s elapsed=%dms: %v", callUUID, time.Since(start).Milliseconds(), err)
 			close(ch)
 			return
 		}
-		log.Printf("[Relay] pre-warmed uuid=%s", callUUID)
+		log.Printf("[Relay] pre-warm done uuid=%s elapsed=%dms", callUUID, time.Since(start).Milliseconds())
 		ch <- rc
 	}()
 	return ch
@@ -469,6 +471,7 @@ func handleAnswer(ev *eventsocket.Event) {
 		}
 
 		buf := make([]byte, 320) // 20ms at 8kHz PCM16
+		var audioChunks int64
 		for {
 			if sess.GetStatus() != "active" {
 				return
@@ -483,6 +486,12 @@ func handleAnswer(ev *eventsocket.Event) {
 					log.Printf("[AudioIn] send audio error uuid=%s: %v", uuid, sendErr)
 					doCleanup("audioin-send-error")
 					return
+				}
+				audioChunks++
+				if audioChunks == 1 {
+					log.Printf("[AudioIn] first audio chunk sent to relay uuid=%s", uuid)
+				} else if audioChunks%500 == 0 {
+					log.Printf("[AudioIn] audio chunks sent uuid=%s total=%d (~%ds)", uuid, audioChunks, audioChunks/50)
 				}
 			}
 			if err != nil {
