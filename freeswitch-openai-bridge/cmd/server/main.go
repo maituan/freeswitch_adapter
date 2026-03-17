@@ -74,6 +74,7 @@ func prewarmRelay(callUUID, scenario, phone, voiceID string, customData map[stri
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	var err error
 	cfg, err = config.Load()
 	if err != nil {
