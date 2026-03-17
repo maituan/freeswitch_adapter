@@ -64,7 +64,7 @@ services:
       - RELAY_API_KEY=${RELAY_API_KEY:-}
       - BASE_URL=http://localhost:3000
       - ASR_PROXY_URL=ws://localhost:8086
-      - TTS_WEBSOCKET_URI=${TTS_WEBSOCKET_URI:-ws://103.253.20.27:8765}
+      - TTS_WEBSOCKET_URI=${TTS_WEBSOCKET_URI:-ws://103.253.20.27:8767}
       - KAFKA_BROKERS=${KAFKA_BROKERS:-localhost:9092}
       - KAFKA_CALL_HISTORY_TOPIC=${KAFKA_CALL_HISTORY_TOPIC:-call-history}
     command: ["npm", "run", "relay"]
