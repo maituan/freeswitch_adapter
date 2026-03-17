@@ -1,0 +1,49 @@
+---
+description: Core engineering rules for all tasks in this project
+alwaysApply: true
+---
+
+# Core Rules
+
+## Mindset
+- Ưu tiên đúng-sự-thật hơn đồng thuận; thấy rủi ro thì nêu rõ.
+- Thiếu dữ liệu quan trọng thì hỏi trước, không tự giả định.
+- Tận dụng code hiện có trước khi viết mới.
+
+## Execution Flow
+1. SEARCH FIRST: tìm code tương tự trong repo trước khi triển khai.
+2. REUSE FIRST: mở rộng code hiện có trước khi tạo module mới.
+3. SMALLEST CHANGE: sửa ít nhất để đạt mục tiêu.
+4. VERIFY: chạy test/lint phù hợp sau thay đổi.
+
+## Code Organization
+- Không nhét toàn bộ logic vào 1 file; tách theo trách nhiệm.
+- File/module đặt tên theo domain và chức năng, không đặt tên chung chung.
+- Nếu file bắt đầu phình to, tách service/helper/schema theo ranh giới rõ ràng.
+
+## Comments And Docs
+- Không comment dày đặc.
+- Chỉ comment ở đoạn khó hiểu, trade-off quan trọng, hoặc rule nghiệp vụ dễ sai.
+- Khi cần comment, viết ngắn gọn bằng tiếng Việt.
+- Public API vẫn cần docstring mô tả input/output/ràng buộc chính.
+- Không tự ý tạo/cập nhật tài liệu (`docs/`, `README`, ADR, hướng dẫn) sau khi code xong nếu chưa được yêu cầu rõ.
+
+## Testing Policy
+- Không tự ý viết test hoặc tạo file test mới nếu chưa có yêu cầu triển khai test.
+- Chỉ bổ sung/chỉnh test khi user yêu cầu rõ phần test.
+- Khi chưa được yêu cầu test, chỉ báo trạng thái chưa kiểm thử thay vì tự thêm test coverage.
+
+## Logging
+- Không log bừa bãi.
+- Chỉ log ở điểm quyết định: gọi external service, retry/fallback, lỗi nghiệp vụ, boundary vào/ra.
+- Ưu tiên structured logging với context đủ dùng; không log dữ liệu nhạy cảm.
+
+## Error Handling
+- Không dùng bare `except`/catch-all không xử lý.
+- Bắt lỗi có chủ đích, thêm context, và rethrow/return theo contract.
+- Không nuốt lỗi im lặng.
+
+## Git
+- Commit message theo conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`...).
+- Mỗi commit là một logical change.
+- Trước commit, tự review diff để loại bỏ thay đổi không liên quan.

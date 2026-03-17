@@ -1,0 +1,43 @@
+---
+description: TypeScript coding standards for this project
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript Standards
+
+## Baseline
+- Dùng TypeScript strict mode.
+- Ưu tiên type rõ ràng cho function input/output.
+- Tránh `any`; nếu bắt buộc dùng phải khoanh vùng và có lý do.
+- Line length mục tiêu: 120.
+
+## Types And Models
+- Ưu tiên `type`/`interface` rõ nghĩa thay vì object shape inline dài.
+- Dùng `zod`/schema validator ở boundary nếu có dữ liệu từ bên ngoài.
+- Dùng `enum` hoặc union literal cho finite choices.
+
+## Functions And Flow
+- Ưu tiên pure function khi có thể.
+- Guard clauses + early return, tránh nested condition sâu.
+- Không để function quá dài; tách helper theo trách nhiệm.
+
+## Imports
+- Group imports: builtin -> third-party -> local.
+- Không dùng wildcard import.
+- Tránh circular dependency giữa modules.
+
+## Error Handling And Logging
+- Không nuốt lỗi im lặng; bắt lỗi có chủ đích và thêm context.
+- Không log bừa bãi; chỉ log tại điểm quyết định hoặc lỗi quan trọng.
+- Không log dữ liệu nhạy cảm.
+
+## Async
+- Dùng `async`/`await` nhất quán cho I/O.
+- Dùng `Promise.all` cho tác vụ độc lập chạy song song.
+- Không block event loop bằng xử lý nặng trong request path.
+
+## Organization
+- Không nhét toàn bộ logic vào 1 file; tách theo module/domain.
+- Tên file và symbol phải thể hiện rõ vai trò.
+- Không tự ý tạo docs/test nếu chưa có yêu cầu rõ từ user.

@@ -1,0 +1,42 @@
+---
+description: Python coding standards for this project
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python Standards
+
+## Style
+- Python 3.11+
+- Formatter: `ruff format`
+- Linter: `ruff check`
+- Type checker: `mypy --strict`
+- Line length: 120
+
+## Data Models
+- Dùng Pydantic `BaseModel` cho data structure ở boundary và contract chính.
+- Không truyền raw `dict[str, Any]` xuyên nhiều layer nếu có thể define model rõ.
+- Tránh `Any`; nếu bắt buộc dùng, phải giới hạn phạm vi và nêu lý do ngắn.
+- Dùng `Enum` cho finite choices.
+- Validate input tại boundary (API layer, agent input, worker input).
+
+## Async
+- Dùng `async`/`await` cho I/O operations (DB, HTTP, LLM calls).
+- Dùng `asyncio.gather()` cho các tác vụ độc lập chạy song song.
+- Không dùng sync blocking calls trong async context.
+
+## Imports
+- Group imports: stdlib -> third-party -> local.
+- Prefer explicit imports, tránh wildcard (`from x import *`).
+- Dùng `__all__` trong `__init__.py` khi export public surface.
+
+## Dependencies
+- Quản lý dependency trong `pyproject.toml`.
+- Cài đặt trong virtual environment.
+- Pin version cho production; cập nhật có kiểm soát.
+
+## Code Quality
+- Type hints cho toàn bộ function signature.
+- Docstring cho public function/class theo hướng ngắn gọn, tập trung input/output.
+- Guard clauses + early returns, tránh nested if sâu.
+- Không tự ý tạo docs/test nếu chưa có yêu cầu rõ từ user.
