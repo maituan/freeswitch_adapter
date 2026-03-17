@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -388,6 +389,32 @@ func handleAnswer(ev *eventsocket.Event) {
 		defer f.Close()
 		log.Printf("[AudioIn] Recording FIFO connected uuid=%s", uuid)
 
+		// Save a copy of caller audio to WAV file
+		wavPath := fmt.Sprintf("/tmp/bridge-recordings/%s.wav", uuid)
+		os.MkdirAll("/tmp/bridge-recordings", 0755)
+		wavFile, wavErr := os.Create(wavPath)
+		if wavErr != nil {
+			log.Printf("[AudioIn] create wav file: %v", wavErr)
+		} else {
+			audio.WriteWAVHeader(wavFile, 8000, 1, 16)
+			defer func() {
+				// Update WAV header with final data size
+				pos, _ := wavFile.Seek(0, io.SeekCurrent)
+				dataSize := pos - 44 // subtract header
+				if dataSize < 0 {
+					dataSize = 0
+				}
+				// Patch RIFF chunk size (offset 4) and data chunk size (offset 40)
+				var buf4 [4]byte
+				binary.LittleEndian.PutUint32(buf4[:], uint32(dataSize+36))
+				wavFile.WriteAt(buf4[:], 4)
+				binary.LittleEndian.PutUint32(buf4[:], uint32(dataSize))
+				wavFile.WriteAt(buf4[:], 40)
+				wavFile.Close()
+				log.Printf("[AudioIn] WAV saved uuid=%s path=%s size=%d", uuid, wavPath, dataSize+44)
+			}()
+		}
+
 		buf := make([]byte, 320) // 20ms at 8kHz PCM16
 		for {
 			if sess.GetStatus() != "active" {
@@ -395,6 +422,10 @@ func handleAnswer(ev *eventsocket.Event) {
 			}
 			n, err := f.Read(buf)
 			if n > 0 {
+				// Tee: ghi song song vào WAV file
+				if wavFile != nil {
+					wavFile.Write(buf[:n])
+				}
 				if sendErr := relayClient.SendAudio(buf[:n]); sendErr != nil {
 					log.Printf("[AudioIn] send audio error uuid=%s: %v", uuid, sendErr)
 					doCleanup("audioin-send-error")
