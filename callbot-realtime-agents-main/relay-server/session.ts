@@ -247,9 +247,9 @@ export class CallSession {
 
     this.ws.send(JSON.stringify({ type: 'ready' }))
 
-    // 7. Trigger agent to speak first (no user message needed)
-    this.isProcessing = true
-    this.realtimeSession.transport.sendEvent({ type: 'response.create' } as any)
+    // 7. Bridge will send {"type":"go"} when the call is actually answered.
+    //    response.create is deferred until then so the bot speaks only after
+    //    the partner picks up (avoids 4s silence timeout on partner PBX).
 
     // 8. Incoming binary audio → forward to ASR proxy (skip while muted during playback)
     this.ws.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
@@ -259,6 +259,12 @@ export class CallSession {
       } else {
         try {
           const msg = JSON.parse((data as Buffer).toString())
+          if (msg.type === 'go') {
+            // Call has been answered — trigger the bot's opening message
+            console.log('[Session] received go → response.create')
+            this.isProcessing = true
+            this.realtimeSession?.transport.sendEvent({ type: 'response.create' } as any)
+          }
           if (msg.type === 'interrupt') {
             this.realtimeSession?.interrupt()
             this.sendEvent('client', 'interrupt', {})

@@ -42,7 +42,35 @@ var (
 type preCallData struct {
 	Scenario   string
 	VoiceID    string
+	Phone      string
 	CustomData map[string]interface{}
+	RelayReady chan *relay.Client // buffered(1); closed on failure; nil = not pre-warmed
+}
+
+// prewarmRelay connects to the relay server in the background so it is ready
+// by the time the called party answers. The channel receives exactly one value
+// (the connected client) or is closed if the connection fails.
+func prewarmRelay(callUUID, scenario, phone, voiceID string, customData map[string]interface{}) chan *relay.Client {
+	ch := make(chan *relay.Client, 1)
+	go func() {
+		rc, err := relay.Connect(relay.ConnectParams{
+			RelayURL:   cfg.Relay.URL,
+			CallID:     callUUID,
+			Scenario:   scenario,
+			Phone:      phone,
+			VoiceID:    voiceID,
+			APIKey:     cfg.Relay.APIKey,
+			CustomData: customData,
+		})
+		if err != nil {
+			log.Printf("[Relay] pre-warm failed uuid=%s: %v", callUUID, err)
+			close(ch)
+			return
+		}
+		log.Printf("[Relay] pre-warmed uuid=%s", callUUID)
+		ch <- rc
+	}()
+	return ch
 }
 
 func main() {
@@ -225,20 +253,44 @@ func handleAnswer(ev *eventsocket.Event) {
 		})
 	}
 
-	// Connect to relay WebSocket
-	relayClient, err := relay.Connect(relay.ConnectParams{
-		RelayURL:   cfg.Relay.URL,
-		CallID:     uuid,
-		Scenario:   scenario,
-		Phone:      phone,
-		VoiceID:    pd.VoiceID,
-		APIKey:     cfg.Relay.APIKey,
-		CustomData: pd.CustomData,
-	})
-	if err != nil {
-		log.Printf("[Call] relay connect failed: %v", err)
-		esl.EndCall(uuid)
-		return
+	// Use pre-warmed relay if available; fall back to fresh connect if not.
+	// Pre-warm starts in the background right after originate so it completes
+	// during the ring phase (typically 2-20s), well before the partner answers.
+	var relayClient *relay.Client
+	if pd.RelayReady != nil {
+		log.Printf("[Call] waiting for pre-warmed relay uuid=%s", uuid)
+		select {
+		case rc, ok := <-pd.RelayReady:
+			if ok && rc != nil {
+				relayClient = rc
+				log.Printf("[Call] pre-warmed relay ready uuid=%s", uuid)
+			} else {
+				log.Printf("[Call] pre-warm relay failed, connecting fresh uuid=%s", uuid)
+			}
+		case <-time.After(10 * time.Second):
+			log.Printf("[Call] pre-warm relay timeout, connecting fresh uuid=%s", uuid)
+		}
+	}
+	if relayClient == nil {
+		var err error
+		relayClient, err = relay.Connect(relay.ConnectParams{
+			RelayURL:   cfg.Relay.URL,
+			CallID:     uuid,
+			Scenario:   scenario,
+			Phone:      phone,
+			VoiceID:    pd.VoiceID,
+			APIKey:     cfg.Relay.APIKey,
+			CustomData: pd.CustomData,
+		})
+		if err != nil {
+			log.Printf("[Call] relay connect failed: %v", err)
+			esl.EndCall(uuid)
+			return
+		}
+	}
+	// Signal the relay that the call was answered — triggers response.create
+	if err := relayClient.SendControl(relay.ControlMsg{Type: "go"}); err != nil {
+		log.Printf("[Call] relay go signal failed uuid=%s: %v", uuid, err)
 	}
 	sess.RelayConn = relayClient
 	sess.CleanupFunc = doCleanup
@@ -584,13 +636,15 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 	pd := preCallData{
 		Scenario:   scenario,
 		VoiceID:    req.VoiceID,
+		Phone:      req.Phone,
 		CustomData: cd,
+		RelayReady: prewarmRelay(callUUID, scenario, req.Phone, req.VoiceID, cd),
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
 	pendingByPhone.Store(phoneKey(req.Phone), pd)
 
-	log.Printf("[API] Outbound call uuid=%s target=%s scenario=%s", callUUID, target, scenario)
+	log.Printf("[API] Outbound call uuid=%s target=%s scenario=%s (relay pre-warming)", callUUID, target, scenario)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -614,7 +668,9 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 
 	pd := preCallData{
 		Scenario:   scenario,
+		Phone:      phone,
 		CustomData: customData,
+		RelayReady: prewarmRelay(callUUID, scenario, phone, "", customData),
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
