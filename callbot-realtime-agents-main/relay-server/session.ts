@@ -253,6 +253,7 @@ export class CallSession {
 
     // 8. Incoming binary audio → forward to ASR proxy (skip while muted during playback)
     let audioChunksReceived = 0
+    let audioChunksSentToAsr = 0
     this.ws.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
       if (isBinary) {
         audioChunksReceived++
@@ -263,6 +264,12 @@ export class CallSession {
         }
         if (MUTE_DURING_PLAYBACK && this.isPlayingAudio) return
         this.asrClient?.sendAudio(data as Buffer)
+        audioChunksSentToAsr++
+        if (audioChunksSentToAsr === 1) {
+          console.log(`[Session] first audio chunk sent to ASR callId=${this.opts.callId}`)
+        } else if (audioChunksSentToAsr % 500 === 0) {
+          console.log(`[Session] audio chunks sent to ASR callId=${this.opts.callId} total=${audioChunksSentToAsr} (~${Math.round(audioChunksSentToAsr / 50)}s)`)
+        }
       } else {
         try {
           const msg = JSON.parse((data as Buffer).toString())
