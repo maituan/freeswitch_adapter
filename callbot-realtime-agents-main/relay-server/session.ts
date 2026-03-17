@@ -4,6 +4,8 @@ import { allAgentSets } from '../src/app/agentConfigs/index'
 import { AsrClient } from './asrClient'
 import { streamTTSAudio } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
+import * as fs from 'fs'
+import * as path from 'path'
 
 function stripControlTags(text: string): string {
   return text
@@ -46,6 +48,8 @@ export class CallSession {
   private startTime = new Date()
   private endTime: Date | null = null
   private closed = false
+  private wavFd: number | null = null
+  private wavBytesWritten = 0
 
   constructor(
     private ws: WebSocket,
@@ -66,6 +70,34 @@ export class CallSession {
 
   async start() {
     this.startTime = new Date()
+
+    // Open WAV file for recording caller audio received from bridge
+    try {
+      const recDir = '/tmp/relay-recordings'
+      fs.mkdirSync(recDir, { recursive: true })
+      const wavPath = path.join(recDir, `${this.opts.callId || this.opts.phone || Date.now()}.wav`)
+      this.wavFd = fs.openSync(wavPath, 'w')
+      // Write 44-byte placeholder WAV header (sizes patched in cleanup)
+      const hdr = Buffer.alloc(44)
+      hdr.write('RIFF', 0)
+      hdr.writeUInt32LE(0, 4)           // file size - 8 (patched later)
+      hdr.write('WAVE', 8)
+      hdr.write('fmt ', 12)
+      hdr.writeUInt32LE(16, 16)         // PCM fmt chunk size
+      hdr.writeUInt16LE(1, 20)          // PCM format
+      hdr.writeUInt16LE(1, 22)          // mono
+      hdr.writeUInt32LE(8000, 24)       // sample rate
+      hdr.writeUInt32LE(16000, 28)      // byte rate (8000 * 1 * 2)
+      hdr.writeUInt16LE(2, 32)          // block align
+      hdr.writeUInt16LE(16, 34)         // bits per sample
+      hdr.write('data', 36)
+      hdr.writeUInt32LE(0, 40)          // data size (patched later)
+      fs.writeSync(this.wavFd, hdr)
+      console.log(`[Session] WAV recording started callId=${this.opts.callId} path=${wavPath}`)
+    } catch (err) {
+      console.error('[Session] WAV open error:', err)
+      this.wavFd = null
+    }
 
     const agents = allAgentSets[this.opts.scenario]
     if (!agents?.length) {
@@ -262,6 +294,14 @@ export class CallSession {
         } else if (audioChunksReceived % 500 === 0) {
           console.log(`[Session] audio chunks received callId=${this.opts.callId} total=${audioChunksReceived} (~${Math.round(audioChunksReceived / 50)}s)`)
         }
+        // Write raw PCM to WAV file (all chunks, including muted ones)
+        if (this.wavFd !== null) {
+          try {
+            const chunk = data as Buffer
+            fs.writeSync(this.wavFd, chunk)
+            this.wavBytesWritten += chunk.length
+          } catch { /* ignore write errors */ }
+        }
         if (MUTE_DURING_PLAYBACK && this.isPlayingAudio) return
         this.asrClient?.sendAudio(data as Buffer)
         audioChunksSentToAsr++
@@ -326,6 +366,23 @@ export class CallSession {
     if (this.closed) return
     this.closed = true
     if (!this.endTime) this.endTime = new Date()
+
+    // Finalize WAV file: patch RIFF and data chunk sizes in header
+    if (this.wavFd !== null) {
+      try {
+        const dataSize = this.wavBytesWritten
+        const buf = Buffer.alloc(4)
+        buf.writeUInt32LE(dataSize + 36, 0)   // RIFF chunk size = dataSize + 36
+        fs.writeSync(this.wavFd, buf, 0, 4, 4)
+        buf.writeUInt32LE(dataSize, 0)         // data chunk size
+        fs.writeSync(this.wavFd, buf, 0, 4, 40)
+        fs.closeSync(this.wavFd)
+        console.log(`[Session] WAV recording saved callId=${this.opts.callId} bytes=${dataSize} (~${Math.round(dataSize / 16000)}s)`)
+      } catch (err) {
+        console.error('[Session] WAV finalize error:', err)
+      }
+      this.wavFd = null
+    }
 
     await this.flushHistory()
 
