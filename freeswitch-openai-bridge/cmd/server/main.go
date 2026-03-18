@@ -482,7 +482,11 @@ func handleAnswer(ev *eventsocket.Event) {
 				if wavFile != nil {
 					wavFile.Write(buf[:n])
 				}
-				if sendErr := relayClient.SendAudio(buf[:n]); sendErr != nil {
+				// Copy before send: buf is reused each iteration; channel may delay write.
+				// Sending buf[:n] causes relay to receive overwritten/corrupted data.
+				chunk := make([]byte, n)
+				copy(chunk, buf[:n])
+				if sendErr := relayClient.SendAudio(chunk); sendErr != nil {
 					log.Printf("[AudioIn] send audio error uuid=%s: %v", uuid, sendErr)
 					doCleanup("audioin-send-error")
 					return

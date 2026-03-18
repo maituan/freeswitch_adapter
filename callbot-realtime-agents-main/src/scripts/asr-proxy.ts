@@ -59,7 +59,9 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         if (asrClient && isStreamStarted) {
-          const buffer = message as Buffer;
+          const buffer = Buffer.isBuffer(message)
+            ? Buffer.from(message)
+            : Buffer.from(message as ArrayBuffer);
           asrClient.sendAudio(buffer);
         }
       } else {

@@ -25,6 +25,18 @@ function pcmDurationMs(totalBytes: number): number {
   return (totalBytes / (8000 * 2)) * 1000
 }
 
+/** Normalize incoming audio to a Buffer copy. Handles Buffer, ArrayBuffer, Buffer[].
+ *  Copying avoids ws library buffer reuse corruption that can cause distortion. */
+function toAudioBuffer(data: Buffer | ArrayBuffer | Buffer[]): Buffer {
+  if (Buffer.isBuffer(data)) {
+    return Buffer.from(data)
+  }
+  if (Array.isArray(data)) {
+    return Buffer.concat(data)
+  }
+  return Buffer.from(data as ArrayBuffer)
+}
+
 function extractControlCommand(text: string): { action: string; ext?: string } | null {
   if (/\|ENDCALL\b/.test(text) || /\[ENDCALL\]/.test(text)) return { action: 'endcall' }
   if (/\|FORWARD\b/.test(text)) return { action: 'transfer' }
@@ -294,16 +306,17 @@ export class CallSession {
         } else if (audioChunksReceived % 500 === 0) {
           console.log(`[Session] audio chunks received callId=${this.opts.callId} total=${audioChunksReceived} (~${Math.round(audioChunksReceived / 50)}s)`)
         }
+        // Normalize to Buffer copy to avoid ws buffer reuse / type mismatch distortion
+        const chunk = toAudioBuffer(data)
         // Write raw PCM to WAV file (all chunks, including muted ones)
         if (this.wavFd !== null) {
           try {
-            const chunk = data as Buffer
             fs.writeSync(this.wavFd, chunk)
             this.wavBytesWritten += chunk.length
           } catch { /* ignore write errors */ }
         }
         if (MUTE_DURING_PLAYBACK && this.isPlayingAudio) return
-        this.asrClient?.sendAudio(data as Buffer)
+        this.asrClient?.sendAudio(chunk)
         audioChunksSentToAsr++
         if (audioChunksSentToAsr === 1) {
           console.log(`[Session] first audio chunk sent to ASR callId=${this.opts.callId}`)
