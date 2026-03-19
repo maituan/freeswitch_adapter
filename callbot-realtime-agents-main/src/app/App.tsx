@@ -42,6 +42,7 @@ import { createLeadgenRouterAgent } from "@/app/agentConfigs/leadgenTNDS/router/
 import { insuranceCarebotScenario } from "@/app/agentConfigs/insuranceCarebot";
 import type { CampaignType, PreferredPronoun } from "@/app/agentConfigs/insuranceCarebot/core/contextSchema";
 import { createRenewalReminderAgent } from "@/app/agentConfigs/insuranceCarebot/scenarios/renewalReminderAgent";
+import { leadgenMultiAgentScenario, setLeadgenMultiAgentRuntimeContext } from "@/app/agentConfigs/leadgenMultiAgent";
 
 // Map used by connect logic for scenarios defined via the SDK.
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
@@ -55,6 +56,7 @@ const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
   abicHotline: abicHotlineScenario,
   leadgenTNDS: leadgenTndsScenario,
   carebotAuto365: insuranceCarebotScenario,
+  leadgenMultiAgent: leadgenMultiAgentScenario,
 };
 
 const carebotCampaignTypes = new Set<CampaignType>([
@@ -230,6 +232,21 @@ function App() {
   const [leadgenPlate, setLeadgenPlate] = useState<string>(
     () => searchParams.get('leadPlate') || '',
   );
+
+  // leadgenMultiAgent form state
+  const [multiGender, setMultiGender] = useState<string>(() => searchParams.get('gender') || '');
+  const [multiName, setMultiName] = useState<string>(() => searchParams.get('name') || '');
+  const [multiPhone, setMultiPhone] = useState<string>(() => searchParams.get('phone') || '');
+  const [multiAgentName, setMultiAgentName] = useState<string>(() => searchParams.get('agentName') || '');
+  const [multiPlate, setMultiPlate] = useState<string>(() => searchParams.get('plate') || '');
+  const [multiAddress, setMultiAddress] = useState<string>(() => searchParams.get('address') || '');
+  const [multiBrand, setMultiBrand] = useState<string>(() => searchParams.get('brand') || '');
+  const [multiColor, setMultiColor] = useState<string>(() => searchParams.get('color') || '');
+  const [multiVehicleType, setMultiVehicleType] = useState<string>(() => searchParams.get('vehicleType') || '');
+  const [multiNumSeats, setMultiNumSeats] = useState<string>(() => searchParams.get('numSeats') || '');
+  const [multiIsBusiness, setMultiIsBusiness] = useState<string>(() => searchParams.get('isBusiness') || '');
+  const [multiWeightTons, setMultiWeightTons] = useState<string>(() => searchParams.get('weightTons') || '');
+  const [multiExpiryDate, setMultiExpiryDate] = useState<string>(() => searchParams.get('expiryDate') || '');
   const [carebotCampaignType, setCarebotCampaignType] = useState<string>(
     () => searchParams.get('campaignType') || carebotFeDefaults.campaignType,
   );
@@ -279,7 +296,7 @@ function App() {
     () => searchParams.get('chatOnly') === '1',
   );
   const isChatOnlyMode =
-    (agentSetKey === 'carebotAuto365' || agentSetKey === 'leadgenTNDS') && carebotChatOnly;
+    (agentSetKey === 'carebotAuto365' || agentSetKey === 'leadgenTNDS' || agentSetKey === 'leadgenMultiAgent') && carebotChatOnly;
   useEffect(() => {
     if (agentSetKey !== 'abicHotline') return;
     if (!abicTestMode || abicTestMode === 'off') return;
@@ -313,12 +330,37 @@ function App() {
     },
   );
 
-  // Save auto-play TTS preference to localStorage
+  const [ttsVoiceId, setTtsVoiceId] = useState<string>(
+    () => {
+      if (typeof window === 'undefined') return 'phuongnhi-north';
+      return localStorage.getItem('ttsVoiceId') || 'phuongnhi-north';
+    },
+  );
+  const [voices, setVoices] = useState<string[]>([]);
+
+  // Save preferences to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('autoPlayTTSEnabled', isAutoPlayTTSEnabled.toString());
     }
   }, [isAutoPlayTTSEnabled]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ttsVoiceId', ttsVoiceId);
+    }
+  }, [ttsVoiceId]);
+
+  // Fetch available TTS voices
+  useEffect(() => {
+    fetch('/api/voices')
+      .then((r) => r.json())
+      .then((data) => {
+        const ids: string[] = (data.voices ?? []).map((v: any) => v.id as string);
+        if (ids.length) setVoices(ids);
+      })
+      .catch(() => {});
+  }, []);
 
   // Initialize TTS hook at App level để có thể capture stream cho recording
   const tts = useTTS();
@@ -386,11 +428,12 @@ function App() {
     })();
   }, [searchParams, callSessionId]);
 
-  useEffect(() => {
-    if (selectedAgentName && sessionStatus === "DISCONNECTED") {
-      connectToRealtime();
-    }
-  }, [selectedAgentName]);  
+  // Auto-connect disabled — user must press Connect manually.
+  // useEffect(() => {
+  //   if (selectedAgentName && sessionStatus === "DISCONNECTED") {
+  //     connectToRealtime();
+  //   }
+  // }, [selectedAgentName]);
 
   useEffect(() => {
     if (
@@ -552,6 +595,43 @@ function App() {
 
         if (agentSetKey === 'abicHotline') {
           customData = { agentConfig: agentSetKey, sessionId: callSessionId };
+        }
+
+        if (agentSetKey === 'leadgenMultiAgent') {
+          const parsedSeats = parseInt(multiNumSeats.trim(), 10);
+          const parsedWeight = parseFloat(multiWeightTons.trim());
+          const runtimeOverrides = {
+            sessionId:           callSessionId,
+            phoneNumber:         multiPhone.trim()      || undefined,
+            displayAgentName:    multiAgentName.trim()  || undefined,
+            overrideGender:      multiGender.trim()     || undefined,
+            overrideName:        multiName.trim()       || undefined,
+            overridePlate:       multiPlate.trim()      || undefined,
+            overrideAddress:     multiAddress.trim()    || undefined,
+            overrideBrand:       multiBrand.trim()      || undefined,
+            overrideColor:       multiColor.trim()      || undefined,
+            overrideVehicleType: (multiVehicleType.trim() as any) || undefined,
+            overrideNumSeats:    Number.isFinite(parsedSeats) && parsedSeats > 0 ? parsedSeats : undefined,
+            overrideIsBusiness:  multiIsBusiness === 'true' ? true : multiIsBusiness === 'false' ? false : undefined,
+            overrideWeightTons:  Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : undefined,
+            overrideExpiryDate:  multiExpiryDate.trim() || undefined,
+          };
+          setLeadgenMultiAgentRuntimeContext(runtimeOverrides);
+          customData = {
+            session_id:   callSessionId,
+            phone:        runtimeOverrides.phoneNumber,
+            gender:       runtimeOverrides.overrideGender,
+            name:         runtimeOverrides.overrideName,
+            plate:        runtimeOverrides.overridePlate,
+            address:      runtimeOverrides.overrideAddress,
+            brand:        runtimeOverrides.overrideBrand,
+            color:        runtimeOverrides.overrideColor,
+            vehicle_type: runtimeOverrides.overrideVehicleType,
+            num_seats:    runtimeOverrides.overrideNumSeats,
+            is_business:  runtimeOverrides.overrideIsBusiness,
+            weight_tons:  runtimeOverrides.overrideWeightTons,
+            expiry_date:  runtimeOverrides.overrideExpiryDate,
+          };
         }
 
         const companyName = agentSetKey === 'customerServiceRetail'
@@ -783,6 +863,14 @@ function App() {
       setTimeout(() => {
         connectToRealtime();
       }, 150);
+    }
+  };
+
+  const handleApplyMultiAgentOverrides = () => {
+    if (sessionStatus === 'CONNECTED' || sessionStatus === 'CONNECTING') {
+      disconnectFromRealtime();
+      setSessionStatus('DISCONNECTED');
+      setTimeout(() => { connectToRealtime(); }, 150);
     }
   };
 
@@ -1077,6 +1165,84 @@ function App() {
         </div>
       )}
 
+      {agentSetKey === 'leadgenMultiAgent' && (
+        <div className="px-5 pb-2 flex items-end gap-2 flex-wrap">
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Xưng hô</label>
+            <input value={multiGender} onChange={(e) => setMultiGender(e.target.value)} placeholder="Anh / Chị" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-24" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Tên khách</label>
+            <input value={multiName} onChange={(e) => setMultiName(e.target.value)} placeholder="Bảo" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-28" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">SĐT</label>
+            <input value={multiPhone} onChange={(e) => setMultiPhone(e.target.value)} placeholder="09..." className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-28" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Tên agent</label>
+            <input value={multiAgentName} onChange={(e) => setMultiAgentName(e.target.value)} placeholder="Thảo" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-24" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Biển số</label>
+            <input value={multiPlate} onChange={(e) => setMultiPlate(e.target.value)} placeholder="29A-86256" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-28" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Địa chỉ</label>
+            <input value={multiAddress} onChange={(e) => setMultiAddress(e.target.value)} placeholder="12 Nguyễn Trãi, Hà Nội" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-44" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Hãng xe</label>
+            <input value={multiBrand} onChange={(e) => setMultiBrand(e.target.value)} placeholder="Toyota" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-24" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Màu xe</label>
+            <input value={multiColor} onChange={(e) => setMultiColor(e.target.value)} placeholder="Trắng" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-20" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Loại xe</label>
+            <select value={multiVehicleType} onChange={(e) => setMultiVehicleType(e.target.value)} className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-28">
+              <option value="">Chưa chọn</option>
+              <option value="car">Xe con</option>
+              <option value="pickup">Bán tải</option>
+              <option value="truck">Xe tải</option>
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Số chỗ</label>
+            <input value={multiNumSeats} onChange={(e) => setMultiNumSeats(e.target.value)} placeholder="5" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-16" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Kinh doanh</label>
+            <select value={multiIsBusiness} onChange={(e) => setMultiIsBusiness(e.target.value)} className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-24">
+              <option value="">Chưa rõ</option>
+              <option value="false">Không</option>
+              <option value="true">Có</option>
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Trọng tải</label>
+            <input value={multiWeightTons} onChange={(e) => setMultiWeightTons(e.target.value)} placeholder="1.5" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-16" />
+          </div>
+          <div className="flex flex-col">
+            <label className="text-xs text-gray-600">Hết hạn</label>
+            <input value={multiExpiryDate} onChange={(e) => setMultiExpiryDate(e.target.value)} placeholder="15/05/2026" className="border border-gray-300 rounded-lg text-sm px-2 py-1 w-28" />
+          </div>
+          <button onClick={handleApplyMultiAgentOverrides} className="border border-gray-300 rounded-lg text-sm px-3 py-1 bg-white hover:bg-gray-50">
+            Áp dụng
+          </button>
+          <label className="flex items-center gap-2 text-sm text-gray-700 mb-1">
+            <input
+              type="checkbox"
+              checked={carebotChatOnly}
+              onChange={(e) => setCarebotChatOnly(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Chat only (không dùng ASR)
+          </label>
+        </div>
+      )}
+
       {agentSetKey === 'carebotAuto365' && (
         <div className="px-5 pb-2 flex items-end gap-2 flex-wrap">
           <div className="flex flex-col">
@@ -1250,6 +1416,7 @@ function App() {
             sessionStatus === "CONNECTED"
           }
           autoPlayTTS={isAutoPlayTTSEnabled}
+          ttsVoiceId={ttsVoiceId}
           // Force streaming mode to avoid offline fetch timeouts
           ttsMode={"streaming"}
           tts={tts}
@@ -1278,6 +1445,9 @@ function App() {
         setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
         isAutoPlayTTSEnabled={isAutoPlayTTSEnabled}
         setIsAutoPlayTTSEnabled={setIsAutoPlayTTSEnabled}
+        ttsVoiceId={ttsVoiceId}
+        setTtsVoiceId={setTtsVoiceId}
+        voices={voices}
         codec={urlCodec}
         onCodecChange={handleCodecChange}
         isTextOnly={isTextOnly}

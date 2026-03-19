@@ -58,6 +58,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
+      - DEBUG_LOGS=false
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini-realtime-preview}
       - RELAY_PORT=8091

@@ -12,7 +12,7 @@ import { useCallSession } from "@/app/hooks/useCallSession";
 
 // TTS interface từ useTTS hook
 interface TTSInstance {
-  speak: (text: string, options?: { mode?: 'streaming' | 'offline'; onStart?: () => void; onEnd?: () => void }) => Promise<void>;
+  speak: (text: string, options?: { voiceId?: string; mode?: 'streaming' | 'offline'; onStart?: () => void; onEnd?: () => void }) => Promise<void>;
   stop: () => void;
   isPlaying: boolean;
   isLoading: boolean;
@@ -36,6 +36,7 @@ export interface TranscriptProps {
   autoPlayTTS?: boolean;
   ttsMode?: 'streaming' | 'offline';
   tts: TTSInstance;
+  ttsVoiceId?: string;
   agentSetKey?: string;
   onEndCall?: () => void;  // Callback khi ENDCALL được trigger
   chatOnly?: boolean;
@@ -51,6 +52,7 @@ function Transcript({
   autoPlayTTS = false,
   ttsMode = 'streaming',
   tts,
+  ttsVoiceId,
   agentSetKey,
   onEndCall,
   chatOnly = false,
@@ -176,7 +178,8 @@ function Transcript({
       const isEndCallMessage = /\|ENDCALL\s*$/i.test(text);
       
       callSession.handleTTSStart();
-      await speak(text, { 
+      await speak(text, {
+        voiceId: ttsVoiceId,
         mode: ttsMode,
         onEnd: () => {
           setPlayingItemId(null);
@@ -282,6 +285,7 @@ function Transcript({
           callSession.handleTTSStart();
 
           speak(latestText, {
+            voiceId: ttsVoiceId,
             mode: ttsMode,
             onStart: () => {
               console.log('[Transcript] TTS playback started');

@@ -14,6 +14,7 @@ const BOT_LABELS: Record<string, string> = {
   abicHotline: 'ABIC Hotline',
   leadgenTNDS: 'LeadGen TNDS',
   carebotAuto365: 'Carebot Auto 365',
+  leadgenMultiAgent: 'Leadgen TNDS Multi-Agent',
 };
 
 export async function GET() {

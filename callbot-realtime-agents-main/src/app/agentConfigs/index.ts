@@ -8,6 +8,7 @@ import { bidvBotScenario, bidvBotMetadata } from './bidvBot';
 import { abicHotlineScenario, abicHotlineMetadata } from './abicHotline';
 import { leadgenTndsScenario, leadgenTndsMetadata } from './leadgenTNDS';
 import { insuranceCarebotScenario, insuranceCarebotMetadata } from './insuranceCarebot';
+import { leadgenMultiAgentScenario } from './leadgenMultiAgent';
 
 import type { RealtimeAgent } from '@openai/agents/realtime';
 
@@ -23,6 +24,7 @@ export const allAgentSets: Record<string, RealtimeAgent[]> = {
   abicHotline: abicHotlineScenario,
   leadgenTNDS: leadgenTndsScenario,
   carebotAuto365: insuranceCarebotScenario,
+  leadgenMultiAgent: leadgenMultiAgentScenario,
 };
 
 // Metadata for scenarios (e.g., to control UI behavior)
@@ -36,4 +38,4 @@ export const agentSetMetadata: Record<string, { isTextOnly?: boolean }> = {
   carebotAuto365: insuranceCarebotMetadata,
 };
 
-export const defaultAgentSetKey = 'leadgenTNDS';
+export const defaultAgentSetKey = 'leadgenMultiAgent';

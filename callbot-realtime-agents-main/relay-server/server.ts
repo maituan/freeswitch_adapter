@@ -7,8 +7,12 @@ const PORT = process.env.RELAY_PORT ?? 8091
 // Leave RELAY_API_KEY unset (or empty) to disable auth.
 const RELAY_API_KEY = process.env.RELAY_API_KEY ?? ''
 
+function ts() {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '')
+}
+
 const wss = new WebSocketServer({ port: Number(PORT) })
-console.log(`[Relay] WebSocket server listening on port ${PORT}`)
+console.log(`${ts()} [Relay] WebSocket server listening on port ${PORT}`)
 
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url!, `http://localhost`)
@@ -38,6 +42,6 @@ wss.on('connection', (ws, req) => {
     customData,
   }
 
-  console.log(`[Relay] New connection:`, opts)
+  console.log(`${ts()} [Relay] New connection:`, opts)
   new CallSession(ws, opts).start()
 })

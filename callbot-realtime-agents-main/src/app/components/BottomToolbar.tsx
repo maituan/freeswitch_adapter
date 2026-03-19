@@ -15,6 +15,9 @@ interface BottomToolbarProps {
   setIsAudioPlaybackEnabled: (val: boolean) => void;
   isAutoPlayTTSEnabled: boolean;
   setIsAutoPlayTTSEnabled: (val: boolean) => void;
+  ttsVoiceId: string;
+  setTtsVoiceId: (val: string) => void;
+  voices: string[];
   codec: string;
   onCodecChange: (newCodec: string) => void;
   isTextOnly?: boolean;
@@ -34,6 +37,9 @@ function BottomToolbar({
   setIsAudioPlaybackEnabled,
   isAutoPlayTTSEnabled,
   setIsAutoPlayTTSEnabled,
+  ttsVoiceId,
+  setTtsVoiceId,
+  voices,
   codec,
   onCodecChange,
   isTextOnly = false,
@@ -142,6 +148,24 @@ function BottomToolbar({
           Auto-play TTS
         </label>
       </div>
+
+      {voices.length > 0 && (
+        <div className="flex flex-row items-center gap-2">
+          <label htmlFor="tts-voice-select" className="flex items-center">
+            TTS voice
+          </label>
+          <select
+            id="tts-voice-select"
+            value={ttsVoiceId}
+            onChange={(e) => setTtsVoiceId(e.target.value)}
+            className="border border-gray-300 rounded-md px-2 py-1 focus:outline-none cursor-pointer"
+          >
+            {voices.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex flex-row items-center gap-2">
         <input

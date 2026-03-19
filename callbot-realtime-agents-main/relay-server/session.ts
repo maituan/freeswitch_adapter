@@ -1,11 +1,17 @@
 import { WebSocket } from 'ws'
 import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
+import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext } from '../src/app/agentConfigs/leadgenMultiAgent'
 import { AsrClient } from './asrClient'
 import { streamTTSAudio } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
-import * as fs from 'fs'
-import * as path from 'path'
+
+// Set DEBUG_LOGS=true to enable verbose history/transport event logs
+const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true'
+
+function ts() {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '')
+}
 
 function stripControlTags(text: string): string {
   return text
@@ -54,14 +60,13 @@ export class CallSession {
   // during this window so they don't cancel an in-progress response.
   private isProcessing = false
   private pendingEndcall = false
+  private botSpokenOnce = false
   private endcallFallbackTimer: ReturnType<typeof setTimeout> | null = null
   private history: CallHistoryMessage[] = []
   private turnId = 0
   private startTime = new Date()
   private endTime: Date | null = null
   private closed = false
-  private wavFd: number | null = null
-  private wavBytesWritten = 0
 
   constructor(
     private ws: WebSocket,
@@ -74,6 +79,14 @@ export class CallSession {
     }
   ) {}
 
+  private get pfx() {
+    return `${ts()} [${this.opts.callId || 'no-uuid'}]`
+  }
+
+  private log(msg: string) { console.log(`${this.pfx} ${msg}`) }
+  private logDebug(msg: string) { if (DEBUG_LOGS) console.log(`${this.pfx} ${msg}`) }
+  private logError(msg: string, ...args: any[]) { console.error(`${this.pfx} ${msg}`, ...args) }
+
   // Send a structured event to the test client
   private sendEvent(direction: 'client' | 'server', eventName: string, eventData: Record<string, any>) {
     if (this.ws.readyState !== WebSocket.OPEN) return
@@ -83,35 +96,10 @@ export class CallSession {
   async start() {
     this.startTime = new Date()
 
-    // Open WAV file for recording caller audio received from bridge
-    try {
-      const recDir = '/tmp/relay-recordings'
-      fs.mkdirSync(recDir, { recursive: true })
-      const wavPath = path.join(recDir, `${this.opts.callId || this.opts.phone || Date.now()}.wav`)
-      this.wavFd = fs.openSync(wavPath, 'w')
-      // Write 44-byte placeholder WAV header (sizes patched in cleanup)
-      const hdr = Buffer.alloc(44)
-      hdr.write('RIFF', 0)
-      hdr.writeUInt32LE(0, 4)           // file size - 8 (patched later)
-      hdr.write('WAVE', 8)
-      hdr.write('fmt ', 12)
-      hdr.writeUInt32LE(16, 16)         // PCM fmt chunk size
-      hdr.writeUInt16LE(1, 20)          // PCM format
-      hdr.writeUInt16LE(1, 22)          // mono
-      hdr.writeUInt32LE(8000, 24)       // sample rate
-      hdr.writeUInt32LE(16000, 28)      // byte rate (8000 * 1 * 2)
-      hdr.writeUInt16LE(2, 32)          // block align
-      hdr.writeUInt16LE(16, 34)         // bits per sample
-      hdr.write('data', 36)
-      hdr.writeUInt32LE(0, 40)          // data size (patched later)
-      fs.writeSync(this.wavFd, hdr)
-      console.log(`[Session] WAV recording started callId=${this.opts.callId} path=${wavPath}`)
-    } catch (err) {
-      console.error('[Session] WAV open error:', err)
-      this.wavFd = null
-    }
-
-    const agents = allAgentSets[this.opts.scenario]
+    // Always build fresh agents per session to avoid SDK internal state reuse across calls
+    let agents = this.opts.scenario === 'leadgenMultiAgent'
+      ? buildLeadgenMultiAgents()
+      : allAgentSets[this.opts.scenario]
     if (!agents?.length) {
       this.ws.send(JSON.stringify({ type: 'error', message: `Unknown scenario: ${this.opts.scenario}` }))
       this.ws.close()
@@ -119,6 +107,28 @@ export class CallSession {
     }
 
     const cd = this.opts.customData ?? {}
+
+    // Inject per-session runtime context for leadgenMultiAgent
+    if (this.opts.scenario === 'leadgenMultiAgent') {
+      const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
+      setLeadgenMultiAgentRuntimeContext({
+        sessionId,
+        leadId:             cd.leadId ?? cd.lead_id,
+        phoneNumber:        this.opts.phone,
+        displayAgentName:   cd.display_agent_name,
+        overrideGender:     cd.gender,
+        overrideName:       cd.name,
+        overridePlate:      cd.plate,
+        overrideVehicleType: cd.vehicle_type,
+        overrideNumSeats:   cd.num_seats != null ? Number(cd.num_seats) : undefined,
+        overrideIsBusiness: cd.is_business != null ? Boolean(cd.is_business) : undefined,
+        overrideWeightTons: cd.weight_tons != null ? Number(cd.weight_tons) : undefined,
+        overrideExpiryDate: cd.expiry_date,
+        overrideAddress:    cd.address,
+        overrideBrand:      cd.brand,
+        overrideColor:      cd.color,
+      })
+    }
 
     // 1. Create OpenAI Realtime session.
     //    We use text-only input (ASR → text → OpenAI) so turn_detection and
@@ -129,6 +139,7 @@ export class CallSession {
       transport: 'websocket',
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini-realtime-preview',
       config: {
+        modalities: ['text'],
         // Override SDK defaults that cause status=failed on gpt-4o-mini-realtime-preview.
         // providerData is spread last so it overrides the computed defaults.
         providerData: {
@@ -136,21 +147,21 @@ export class CallSession {
           input_audio_transcription: null,
         },
       },
-      context: { phone: this.opts.phone, leadId: cd.leadId, customData: cd },
+      context: { phone: this.opts.phone, leadId: cd.leadId ?? cd.lead_id, callId: this.opts.callId, customData: cd },
     })
 
     // 3. Handle session-level errors so they don't crash the process
     this.realtimeSession.on('error', (err: any) => {
-      console.error('[Session] RealtimeSession error:', err)
+      this.logError('error:', err)
       this.ws.send(JSON.stringify({ type: 'error', message: String(err?.message ?? err) }))
     })
 
-    // 4. Forward SDK events to client (mirrors useHandleSessionHistory + useRealtimeSession)
+    // 4. Forward SDK events to client — verbose events gated by DEBUG_LOGS
     this.realtimeSession.on('history_added', (item: any) => {
       let eventName = item?.type ?? 'history_added'
       if (item?.type === 'message') eventName = `${item.role}.${item.status ?? 'added'}`
       if (item?.type === 'function_call') eventName = `function.${item.name}.${item.status ?? 'added'}`
-      console.log(`[Session] history_added event=${eventName}`)
+      this.logDebug(`history_added event=${eventName}`)
       this.sendEvent('server', eventName, item)
     })
 
@@ -159,7 +170,7 @@ export class CallSession {
         let eventName = item?.type ?? 'history_updated'
         if (item?.type === 'message') eventName = `${item.role}.${item.status ?? 'updated'}`
         if (item?.type === 'function_call') eventName = `function.${item.name}.${item.status ?? 'updated'}`
-        console.log(`[Session] history_updated event=${eventName}`)
+        this.logDebug(`history_updated event=${eventName}`)
         this.sendEvent('server', eventName, item)
       }
     })
@@ -168,7 +179,7 @@ export class CallSession {
       const history: any[] = ctx?.context?.history ?? []
       const call = [...history].reverse().find((c: any) => c?.type === 'function_call' && c?.name === functionCall?.name)
       const name = call?.name ?? functionCall?.name
-      console.log(`[Session] agent_tool_start tool=${name} args=${JSON.stringify(call?.arguments ?? functionCall?.arguments).substring(0, 200)}`)
+      this.log(`tool_start tool=${name}`)
       this.sendEvent('client', 'tool_start', {
         name,
         args: call?.arguments ?? functionCall?.arguments,
@@ -179,39 +190,35 @@ export class CallSession {
       const history: any[] = ctx?.context?.history ?? []
       const call = [...history].reverse().find((c: any) => c?.type === 'function_call' && c?.name === functionCall?.name)
       const name = call?.name ?? functionCall?.name
-      const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
-      console.log(`[Session] agent_tool_end tool=${name} result=${resultStr.substring(0, 300)}`)
+      this.log(`tool_end tool=${name}`)
       this.sendEvent('client', 'tool_end', {
         name,
         result: typeof result === 'string' ? tryParseJson(result) : result,
       })
     })
 
-    this.realtimeSession.on('agent_handoff', (item: any) => {
-      const history: any[] = item?.context?.history ?? []
-      const last = [...history].reverse().find((c: any) => c?.type === 'message' && c?.role === 'assistant')
-      const agentName = last?.name?.split('transfer_to_')[1] ?? 'unknown'
-      console.log(`[Session] agent_handoff to=${agentName}`)
+    this.realtimeSession.on('agent_handoff', (_ctx: any, _from: any, toAgent: any) => {
+      const agentName = toAgent?.name ?? 'unknown'
+      this.log(`handoff → ${agentName}`)
       this.sendEvent('server', 'agent_handoff', { agentName })
     })
 
     this.realtimeSession.on('transport_event', (event: any) => {
-      // Skip raw audio delta events — they're too noisy and binary
+      // Skip raw audio delta events — too noisy
       if (event?.type === 'response.audio.delta' || event?.type === 'input_audio_buffer.append') return
       // Track response lifecycle to block ASR transcripts during generation
       if (event?.type === 'response.created') {
         this.isProcessing = true
-        console.log('[Session] transport_event type=response.created → isProcessing=true')
+        this.logDebug('response.created → isProcessing=true')
       } else if (event?.type === 'response.done') {
         this.isProcessing = false
         const r = event?.response ?? {}
-        const output = r.output ?? []
-        const details = r.status_details ? JSON.stringify(r.status_details).substring(0, 300) : 'null'
-        console.log(`[Session] transport_event type=response.done → isProcessing=false status=${r.status} statusDetails=${details} outputCount=${output.length} inputTokens=${r.usage?.input_tokens ?? 0} outputTokens=${r.usage?.output_tokens ?? 0} output=${JSON.stringify(output).substring(0, 500)}`)
+        const tokens = `in=${r.usage?.input_tokens ?? 0} out=${r.usage?.output_tokens ?? 0}`
+        this.logDebug(`response.done status=${r.status} ${tokens}`)
       } else if (event?.type === 'error') {
-        console.error(`[Session] transport_event type=error`, JSON.stringify(event).substring(0, 500))
+        this.logError(`transport error`, JSON.stringify(event).substring(0, 500))
       } else {
-        console.log(`[Session] transport_event type=${event?.type ?? 'unknown'}`)
+        this.logDebug(`transport_event type=${event?.type ?? 'unknown'}`)
       }
       this.sendEvent('server', event?.type ?? 'transport_event', event)
     })
@@ -221,7 +228,8 @@ export class CallSession {
       const text = stripControlTags(rawText)
       const cmd  = extractControlCommand(rawText)
 
-      console.log(`[Session] agent_end rawText="${rawText.substring(0, 200)}" text="${text.substring(0, 80)}" cmd=${cmd?.action ?? 'none'}`)
+      this.log(`BOT: "${rawText.substring(0, 300)}"`)  // rawText includes control tags
+      this.botSpokenOnce = true
       this.sendEvent('server', 'agent_end', { rawText, text })
 
       if (text.trim()) {
@@ -235,7 +243,6 @@ export class CallSession {
           for await (const chunk of streamTTSAudio(text, { resampleRate: 8000, voiceId: ttsVoice })) {
             chunkIdx++
             totalBytes += chunk.length
-            console.log(`[Session] tts_chunk #${chunkIdx} size=${chunk.length} totalBytes=${totalBytes}`)
             if (MUTE_DURING_PLAYBACK) {
               const elapsed = Date.now() - streamStart
               const remaining = Math.max(pcmDurationMs(totalBytes) - elapsed + 300, 300)
@@ -243,26 +250,26 @@ export class CallSession {
             }
             if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk)
           }
-          console.log(`[Session] tts_done chunks=${chunkIdx} totalBytes=${totalBytes} elapsed=${Date.now() - streamStart}ms`)
+          this.log(`TTS done chunks=${chunkIdx} bytes=${totalBytes} elapsed=${Date.now() - streamStart}ms voice=${ttsVoice ?? 'default'}`)
           this.sendEvent('client', 'tts_done', { totalBytes })
           // 100ms silence flushes the last meaningful chunk through FreeSWITCH's buffer.
           const silenceBytes = (8000 * 2 * 100) / 1000
           if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.alloc(silenceBytes, 0))
         } catch (err: any) {
-          console.error('[Session] TTS error:', err)
+          this.logError('TTS error:', err)
           this.sendEvent('client', 'tts_error', { message: String(err?.message ?? err) })
         }
       }
 
       if (cmd) {
-        console.log(`[Session] sending command action=${cmd.action} ext=${cmd.ext ?? ''}`)
+        this.log(`command action=${cmd.action} ext=${cmd.ext ?? ''}`)
         this.ws.send(JSON.stringify({ type: 'command', ...cmd }))
         if (cmd.action === 'endcall') {
           // Defer cleanup until we receive playback_stop from the bridge,
           // so the last TTS audio finishes playing before we tear down.
           this.pendingEndcall = true
           this.endcallFallbackTimer = setTimeout(() => {
-            console.log('[Session] endcall fallback timeout (60s), cleaning up')
+            this.log('endcall fallback timeout (60s), cleaning up')
             void this.cleanup()
           }, 60_000)
         }
@@ -276,12 +283,14 @@ export class CallSession {
     await this.asrClient.connect()
     this.asrClient.onTranscript((transcript, isFinal) => {
       this.sendEvent('client', 'asr_transcript', { transcript, isFinal })
+      if (!this.botSpokenOnce) return  // discard all input until bot has spoken first
       if (isFinal && transcript.trim()) {
         if (this.isProcessing || this.isPlayingAudio) {
-          console.log(`[Session] asr_transcript suppressed (isProcessing=${this.isProcessing} isPlayingAudio=${this.isPlayingAudio}) text="${transcript.trim().substring(0, 80)}"`)
+          this.log(`ASR suppressed (processing=${this.isProcessing} playing=${this.isPlayingAudio}): "${transcript.trim().substring(0, 80)}"`)
           return
         }
         const text = transcript.trim()
+        this.log(`USER: "${text.substring(0, 200)}"`)
         this.addUserMessage(text, transcript)
         this.isProcessing = true
         this.realtimeSession?.sendMessage(text)
@@ -297,38 +306,22 @@ export class CallSession {
 
     // 8. Incoming binary audio → forward to ASR proxy (skip while muted during playback)
     let audioChunksReceived = 0
-    let audioChunksSentToAsr = 0
     this.ws.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
       if (isBinary) {
         audioChunksReceived++
         if (audioChunksReceived === 1) {
-          console.log(`[Session] first audio chunk received from bridge callId=${this.opts.callId}`)
-        } else if (audioChunksReceived % 500 === 0) {
-          console.log(`[Session] audio chunks received callId=${this.opts.callId} total=${audioChunksReceived} (~${Math.round(audioChunksReceived / 50)}s)`)
+          this.log(`first audio chunk received callId=${this.opts.callId}`)
         }
         // Normalize to Buffer copy to avoid ws buffer reuse / type mismatch distortion
         const chunk = toAudioBuffer(data)
-        // Write raw PCM to WAV file (all chunks, including muted ones)
-        if (this.wavFd !== null) {
-          try {
-            fs.writeSync(this.wavFd, chunk)
-            this.wavBytesWritten += chunk.length
-          } catch { /* ignore write errors */ }
-        }
         if (MUTE_DURING_PLAYBACK && this.isPlayingAudio) return
         this.asrClient?.sendAudio(chunk)
-        audioChunksSentToAsr++
-        if (audioChunksSentToAsr === 1) {
-          console.log(`[Session] first audio chunk sent to ASR callId=${this.opts.callId}`)
-        } else if (audioChunksSentToAsr % 500 === 0) {
-          console.log(`[Session] audio chunks sent to ASR callId=${this.opts.callId} total=${audioChunksSentToAsr} (~${Math.round(audioChunksSentToAsr / 50)}s)`)
-        }
       } else {
         try {
           const msg = JSON.parse((data as Buffer).toString())
           if (msg.type === 'go') {
             // Call has been answered — trigger the bot's opening message
-            console.log('[Session] received go → response.create')
+            this.log('received go → response.create')
             this.isProcessing = true
             this.realtimeSession?.transport.sendEvent({ type: 'response.create' } as any)
           }
@@ -379,23 +372,6 @@ export class CallSession {
     if (this.closed) return
     this.closed = true
     if (!this.endTime) this.endTime = new Date()
-
-    // Finalize WAV file: patch RIFF and data chunk sizes in header
-    if (this.wavFd !== null) {
-      try {
-        const dataSize = this.wavBytesWritten
-        const buf = Buffer.alloc(4)
-        buf.writeUInt32LE(dataSize + 36, 0)   // RIFF chunk size = dataSize + 36
-        fs.writeSync(this.wavFd, buf, 0, 4, 4)
-        buf.writeUInt32LE(dataSize, 0)         // data chunk size
-        fs.writeSync(this.wavFd, buf, 0, 4, 40)
-        fs.closeSync(this.wavFd)
-        console.log(`[Session] WAV recording saved callId=${this.opts.callId} bytes=${dataSize} (~${Math.round(dataSize / 16000)}s)`)
-      } catch (err) {
-        console.error('[Session] WAV finalize error:', err)
-      }
-      this.wavFd = null
-    }
 
     await this.flushHistory()
 
@@ -451,6 +427,7 @@ export class CallSession {
       scenario: this.opts.scenario,
       phone: this.opts.phone,
       start_time: this.startTime.toISOString(),
+      answer_time: this.startTime.toISOString(),
       end_time: (this.endTime || new Date()).toISOString(),
       history: this.history,
       customer_info: { ...cd },

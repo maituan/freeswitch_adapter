@@ -1,8 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-
-const SCENARIOS = ['leadgenTNDS', 'hotlineAI', 'motheAI', 'bidvBot', 'abicHotline', 'carebotAuto365']
+import { useState, useEffect } from 'react'
 
 interface CallRecord {
   time: string
@@ -14,17 +12,53 @@ interface CallRecord {
 }
 
 export default function OutboundPage() {
+  const [scenarios, setScenarios] = useState<{ botId: string; label: string }[]>([])
+  const [voices, setVoices] = useState<string[]>([])
   const [bridgeUrl, setBridgeUrl] = useState('http://localhost:8083')
   const [phone, setPhone] = useState('0901234567')
   const [sipEndpoint, setSipEndpoint] = useState('')
   const [callerID, setCallerID] = useState('02899999999')
-  const [scenario, setScenario] = useState('leadgenTNDS')
-  const [leadId, setLeadId] = useState('')
-  const [gender, setGender] = useState('')
+  const [scenario, setScenario] = useState('leadgenMultiAgent')
+  const [voiceId, setVoiceId] = useState('phuongnhi-north')
+
+  // Slots
+  const [gender, setGender] = useState('anh')
   const [name, setName] = useState('')
   const [plate, setPlate] = useState('')
+  const [agentName, setAgentName] = useState('Thảo')
+  const [address, setAddress] = useState('')
+  const [brand, setBrand] = useState('')
+  const [color, setColor] = useState('')
+  const [vehicleType, setVehicleType] = useState('')
+  const [numSeats, setNumSeats] = useState('')
+  const [isBusiness, setIsBusiness] = useState('')
+  const [weightTons, setWeightTons] = useState('')
+  const [expiryDate, setExpiryDate] = useState('')
+
   const [loading, setLoading] = useState(false)
   const [calls, setCalls] = useState<CallRecord[]>([])
+
+  useEffect(() => {
+    fetch('/api/bots')
+      .then((r) => r.json())
+      .then((data) => {
+        const bots = data.bots ?? []
+        setScenarios(bots)
+        const def = bots.find((b: any) => b.isDefault)
+        if (def) setScenario(def.botId)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/voices')
+      .then((r) => r.json())
+      .then((data) => {
+        const ids: string[] = (data.voices ?? []).map((v: any) => v.id)
+        setVoices(ids)
+      })
+      .catch(() => {})
+  }, [])
 
   const canCall = !loading && (phone.trim() !== '' || sipEndpoint.trim() !== '')
 
@@ -32,14 +66,29 @@ export default function OutboundPage() {
     if (!canCall) return
     setLoading(true)
     try {
-      const body: Record<string, string> = {
+      const customData: Record<string, any> = {}
+      if (agentName.trim())   customData.display_agent_name = agentName.trim()
+      if (address.trim())     customData.address             = address.trim()
+      if (brand.trim())       customData.brand               = brand.trim()
+      if (color.trim())       customData.color               = color.trim()
+      if (vehicleType.trim()) customData.vehicle_type        = vehicleType.trim()
+      if (expiryDate.trim())  customData.expiry_date         = expiryDate.trim()
+      const seats = parseInt(numSeats.trim(), 10)
+      if (Number.isFinite(seats) && seats > 0) customData.num_seats = seats
+      if (isBusiness === 'true')  customData.is_business = true
+      if (isBusiness === 'false') customData.is_business = false
+      const weight = parseFloat(weightTons.trim())
+      if (Number.isFinite(weight) && weight > 0) customData.weight_tons = weight
+
+      const body: Record<string, any> = {
         bridgeUrl,
         scenario,
         caller_id: callerID.trim(),
+        custom_data: customData,
       }
       if (phone.trim())       body.phone        = phone.trim()
       if (sipEndpoint.trim()) body.sip_endpoint = sipEndpoint.trim()
-      if (leadId.trim())      body.lead_id      = leadId.trim()
+      if (voiceId.trim())     body.voice_id     = voiceId.trim()
       if (gender.trim())      body.gender       = gender.trim()
       if (name.trim())        body.name         = name.trim()
       if (plate.trim())       body.plate        = plate.trim()
@@ -74,7 +123,7 @@ export default function OutboundPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '32px 16px' }}>
-      <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '720px', margin: '0 auto' }}>
         <h2 style={{ fontFamily: 'monospace', fontSize: '20px', fontWeight: 700, marginBottom: '24px', color: '#0f172a' }}>
           Outbound Call
         </h2>
@@ -101,26 +150,81 @@ export default function OutboundPage() {
 
           <Divider label="Call settings" />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
             <Field label="Scenario">
               <select style={inp} value={scenario} onChange={(e) => setScenario(e.target.value)}>
-                {SCENARIOS.map((s) => <option key={s}>{s}</option>)}
+                {scenarios.map((s) => <option key={s.botId} value={s.botId}>{s.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Voice">
+              <select style={inp} value={voiceId} onChange={(e) => setVoiceId(e.target.value)}>
+                {voices.length === 0
+                  ? <option value={voiceId}>{voiceId}</option>
+                  : voices.map((v) => <option key={v} value={v}>{v}</option>)
+                }
               </select>
             </Field>
             <Field label="Caller ID">
               <input style={inp} value={callerID} onChange={(e) => setCallerID(e.target.value)} />
             </Field>
-            <Field label="Lead ID">
-              <input style={inp} value={leadId} onChange={(e) => setLeadId(e.target.value)} placeholder="optional" />
+          </div>
+
+          <Divider label="Thông tin khách hàng" />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <Field label="Xưng hô">
+              <select style={inp} value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="">-- chọn --</option>
+                <option value="anh">Anh</option>
+                <option value="chị">Chị</option>
+              </select>
             </Field>
-            <Field label="Gender">
-              <input style={inp} value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Anh / Chị" />
+            <Field label="Tên khách">
+              <input style={inp} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nguyễn Văn A" />
             </Field>
-            <Field label="Name">
-              <input style={inp} value={name} onChange={(e) => setName(e.target.value)} placeholder="optional" />
+            <Field label="Tên agent">
+              <input style={inp} value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="Thảo" />
             </Field>
-            <Field label="Plate">
-              <input style={inp} value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="51G-12345" />
+          </div>
+
+          <Divider label="Thông tin xe" />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <Field label="Biển số">
+              <input style={inp} value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="29A-12345" />
+            </Field>
+            <Field label="Hãng xe">
+              <input style={inp} value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Toyota" />
+            </Field>
+            <Field label="Màu xe">
+              <input style={inp} value={color} onChange={(e) => setColor(e.target.value)} placeholder="Trắng" />
+            </Field>
+            <Field label="Loại xe">
+              <select style={inp} value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+                <option value="">Chưa chọn</option>
+                <option value="xe_con">Xe con</option>
+                <option value="xe_tai">Xe tải</option>
+                <option value="xe_khach">Xe khách</option>
+              </select>
+            </Field>
+            <Field label="Số chỗ">
+              <input style={inp} value={numSeats} onChange={(e) => setNumSeats(e.target.value)} placeholder="5" type="number" min="1" />
+            </Field>
+            <Field label="Kinh doanh">
+              <select style={inp} value={isBusiness} onChange={(e) => setIsBusiness(e.target.value)}>
+                <option value="">Chưa rõ</option>
+                <option value="false">Không kinh doanh</option>
+                <option value="true">Kinh doanh</option>
+              </select>
+            </Field>
+            <Field label="Trọng tải (tấn)">
+              <input style={inp} value={weightTons} onChange={(e) => setWeightTons(e.target.value)} placeholder="1.5" type="number" min="0" step="0.5" />
+            </Field>
+            <Field label="Địa chỉ">
+              <input style={inp} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="12 Nguyễn Trãi, Hà Nội" />
+            </Field>
+            <Field label="Hết hạn (dd/MM/yyyy)">
+              <input style={inp} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} placeholder="15/05/2026" />
             </Field>
           </div>
 

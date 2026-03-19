@@ -1,5 +1,9 @@
 import { Kafka, logLevel, Producer } from 'kafkajs'
 
+function ts() {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '')
+}
+
 export interface CallHistoryMessage {
   role: 'user' | 'assistant'
   content: string
@@ -13,6 +17,7 @@ export interface CallHistoryPayload {
   scenario: string
   phone: string
   start_time: string
+  answer_time: string
   end_time: string
   history: CallHistoryMessage[]
   customer_info: Record<string, any>
@@ -30,7 +35,7 @@ async function getProducer(): Promise<Producer | null> {
 
   if (!brokers.length || !topic) {
     if (!kafkaInitialized) {
-      console.log('[Kafka] Call history disabled (missing KAFKA_BROKERS or KAFKA_CALL_HISTORY_TOPIC)')
+      console.log(`${ts()} [Kafka] Call history disabled (missing KAFKA_BROKERS or KAFKA_CALL_HISTORY_TOPIC)`)
       kafkaInitialized = true
     }
     return null
@@ -45,7 +50,7 @@ async function getProducer(): Promise<Producer | null> {
   producer = kafka.producer()
   await producer.connect()
   kafkaInitialized = true
-  console.log('[Kafka] Connected for call history logging')
+  console.log(`${ts()} [Kafka] Connected for call history logging`)
   return producer
 }
 
@@ -64,9 +69,9 @@ export async function sendCallHistory(key: string, payload: CallHistoryPayload):
         },
       ],
     })
-    console.log('[Kafka] Call history sent', { topic, key })
+    console.log(`${ts()} [Kafka] Call history sent topic=${topic} key=${key}`)
   } catch (err) {
-    console.error('[Kafka] Failed to send call history:', err)
+    console.error(`${ts()} [Kafka] Failed to send call history:`, err)
   }
 }
 
