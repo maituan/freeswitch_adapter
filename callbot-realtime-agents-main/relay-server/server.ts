@@ -34,12 +34,19 @@ wss.on('connection', (ws, req) => {
     if (raw) customData = JSON.parse(raw)
   } catch { }
 
+  let mediaParams: Record<string, any> = {}
+  try {
+    const raw = p.get('mediaParams')
+    if (raw) mediaParams = JSON.parse(raw)
+  } catch { }
+
   const opts = {
     callId: p.get('callId') ?? '',
     scenario: p.get('scenario') ?? 'leadgenTNDS',
     phone: p.get('phone') ?? '',
     voiceId: p.get('voiceId') ?? customData.voiceId ?? '',
     customData,
+    mediaParams,
   }
 
   console.log(`${ts()} [Relay] New connection:`, opts)

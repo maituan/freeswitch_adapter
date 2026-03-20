@@ -46,6 +46,9 @@ services:
       - ASR_TOKEN=${ASR_TOKEN}
       - ASR_GRPC_URI=${ASR_GRPC_URI:-103.253.20.28:9000}
       - ASR_PROXY_PORT=8086
+      - ASR_SILENCE_TIMEOUT=${ASR_SILENCE_TIMEOUT:-10}
+      - ASR_SPEECH_TIMEOUT=${ASR_SPEECH_TIMEOUT:-1}
+      - ASR_SPEECH_MAX=${ASR_SPEECH_MAX:-30}
     command: ["npm", "run", "asr-proxy"]
 
   # WebSocket relay server — receives audio from Go bridge, calls OpenAI + TTS — port 8091
@@ -68,6 +71,11 @@ services:
       - TTS_WEBSOCKET_URI=${TTS_WEBSOCKET_URI:-ws://103.253.20.27:8767}
       - KAFKA_BROKERS=${KAFKA_BROKERS:-localhost:9092}
       - KAFKA_CALL_HISTORY_TOPIC=${KAFKA_CALL_HISTORY_TOPIC:-call-history}
+      - TTS_TEMPO=${TTS_TEMPO:-}
+      - LANGFUSE_ENABLED=${LANGFUSE_ENABLED:-false}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-http://localhost:3001}
     command: ["npm", "run", "relay"]
     depends_on:
       - callbot-agents
@@ -107,6 +115,42 @@ services:
     depends_on:
       - callbot-kafka
 
+  # Langfuse self-hosted observability — UI at http://localhost:3001
+  # Enable by setting LANGFUSE_ENABLED=true in .env
+  langfuse-db:
+    image: postgres:15-alpine
+    container_name: langfuse-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=${LANGFUSE_DB_PASSWORD:-langfuse@156}
+      - POSTGRES_DB=langfuse
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    networks:
+      - langfuse-net
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: langfuse
+    restart: unless-stopped
+    depends_on:
+      - langfuse-db
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse}@langfuse-db:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-change-me-in-prod}
+      - SALT=${LANGFUSE_SALT:-change-me-in-prod}
+      - NEXTAUTH_URL=${LANGFUSE_BASE_URL:-http://localhost:3001}
+      - TELEMETRY_ENABLED=false
+    networks:
+      - langfuse-net
+
+networks:
+  langfuse-net:
+
 volumes:
   callbot-postgres-data:
   callbot-kafka-data:
+  langfuse-db-data:

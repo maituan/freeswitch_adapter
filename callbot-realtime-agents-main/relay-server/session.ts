@@ -5,6 +5,7 @@ import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext } from '../
 import { AsrClient } from './asrClient'
 import { streamTTSAudio } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
+import { createCallTrace, flushTelemetry } from './telemetry'
 
 // Set DEBUG_LOGS=true to enable verbose history/transport event logs
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true'
@@ -67,15 +68,25 @@ export class CallSession {
   private startTime = new Date()
   private endTime: Date | null = null
   private closed = false
+  private trace: any = null
+  private llmGenStartTime: Date | null = null
+  private sendMessageTime: Date | null = null
+  private llmFirstTokenTime: Date | null = null
+  // Sticky per-turn: capture the FIRST response.created / response.text.delta
+  // after each sendMessage(). Not cleared by response.done so they remain
+  // available when agent_end fires (which may be after multiple tool-call rounds).
+  private turnLlmStartTime: Date | null = null
+  private turnLlmFirstTokenTime: Date | null = null
 
   constructor(
     private ws: WebSocket,
     private opts: {
-      callId     : string
-      scenario   : string
-      phone      : string
-      voiceId    : string
-      customData : Record<string, any>
+      callId      : string
+      scenario    : string
+      phone       : string
+      voiceId     : string
+      customData  : Record<string, any>
+      mediaParams : Record<string, any>
     }
   ) {}
 
@@ -95,6 +106,7 @@ export class CallSession {
 
   async start() {
     this.startTime = new Date()
+    this.trace = createCallTrace(this.opts.callId, this.opts.scenario, this.opts.phone)
 
     // Always build fresh agents per session to avoid SDK internal state reuse across calls
     let agents = this.opts.scenario === 'leadgenMultiAgent'
@@ -107,6 +119,7 @@ export class CallSession {
     }
 
     const cd = this.opts.customData ?? {}
+    const mp = this.opts.mediaParams ?? {}
 
     // Inject per-session runtime context for leadgenMultiAgent
     if (this.opts.scenario === 'leadgenMultiAgent') {
@@ -209,12 +222,33 @@ export class CallSession {
       // Track response lifecycle to block ASR transcripts during generation
       if (event?.type === 'response.created') {
         this.isProcessing = true
+        this.llmGenStartTime = new Date()
+        this.llmFirstTokenTime = null
+        if (!this.turnLlmStartTime) this.turnLlmStartTime = this.llmGenStartTime
         this.logDebug('response.created → isProcessing=true')
+      } else if (event?.type === 'response.text.delta' && !this.llmFirstTokenTime) {
+        this.llmFirstTokenTime = new Date()
+        if (!this.turnLlmFirstTokenTime) this.turnLlmFirstTokenTime = this.llmFirstTokenTime
       } else if (event?.type === 'response.done') {
         this.isProcessing = false
         const r = event?.response ?? {}
         const tokens = `in=${r.usage?.input_tokens ?? 0} out=${r.usage?.output_tokens ?? 0}`
         this.logDebug(`response.done status=${r.status} ${tokens}`)
+        if (this.trace && this.llmGenStartTime) {
+          const endTime = new Date()
+          const ttft = this.llmFirstTokenTime
+            ? this.llmFirstTokenTime.getTime() - this.llmGenStartTime.getTime()
+            : null
+          const gen = this.trace.generation({
+            name: 'llm-turn',
+            model: r.model ?? process.env.OPENAI_MODEL,
+            startTime: this.llmGenStartTime,
+            usage: { input: r.usage?.input_tokens ?? 0, output: r.usage?.output_tokens ?? 0 },
+            metadata: { ttftMs: ttft },
+          })
+          gen.end({ endTime })
+          this.llmGenStartTime = null
+        }
       } else if (event?.type === 'error') {
         this.logError(`transport error`, JSON.stringify(event).substring(0, 500))
       } else {
@@ -235,13 +269,18 @@ export class CallSession {
       if (text.trim()) {
         this.addAssistantMessage(text, rawText)
         this.sendEvent('client', 'tts_start', { text })
+        const ttsStartTime = new Date()
+        const ttsSpan = this.trace?.span({ name: 'tts', startTime: ttsStartTime, input: text })
         try {
           let totalBytes = 0
           let chunkIdx = 0
+          let firstChunkTime: Date | null = null
           const streamStart = Date.now()
           const ttsVoice = this.opts.voiceId || undefined
-          for await (const chunk of streamTTSAudio(text, { resampleRate: 8000, voiceId: ttsVoice })) {
+          const ttsTempo = mp.tts_tempo != null ? Number(mp.tts_tempo) : undefined
+          for await (const chunk of streamTTSAudio(text, { resampleRate: 8000, voiceId: ttsVoice, tempo: ttsTempo })) {
             chunkIdx++
+            if (chunkIdx === 1) firstChunkTime = new Date()
             totalBytes += chunk.length
             if (MUTE_DURING_PLAYBACK) {
               const elapsed = Date.now() - streamStart
@@ -250,13 +289,40 @@ export class CallSession {
             }
             if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk)
           }
-          this.log(`TTS done chunks=${chunkIdx} bytes=${totalBytes} elapsed=${Date.now() - streamStart}ms voice=${ttsVoice ?? 'default'}`)
+          const ttsElapsed = Date.now() - streamStart
+          const ttfc = firstChunkTime ? firstChunkTime.getTime() - ttsStartTime.getTime() : null
+          const pipelineMs = (firstChunkTime && this.sendMessageTime)
+            ? firstChunkTime.getTime() - this.sendMessageTime.getTime()
+            : null
+          this.log(`TTS done chunks=${chunkIdx} bytes=${totalBytes} elapsed=${ttsElapsed}ms ttfc=${ttfc ?? '?'}ms pipeline=${pipelineMs ?? '?'}ms voice=${ttsVoice ?? 'default'}`)
+          ttsSpan?.end({ endTime: new Date(), output: { totalBytes, elapsedMs: ttsElapsed, ttfcMs: ttfc, voice: ttsVoice ?? 'default' } })
+          if (this.trace && this.sendMessageTime && firstChunkTime) {
+            const asrToLlmMs = this.turnLlmStartTime
+              ? this.turnLlmStartTime.getTime() - this.sendMessageTime.getTime()
+              : null
+            const llmTtftMs = (this.turnLlmFirstTokenTime && this.turnLlmStartTime)
+              ? this.turnLlmFirstTokenTime.getTime() - this.turnLlmStartTime.getTime()
+              : null
+            this.trace.span({
+              name: 'pipeline-latency',
+              startTime: this.sendMessageTime,
+              endTime: firstChunkTime,
+              output: {
+                totalPipelineMs: pipelineMs,
+                asrToLlmMs,
+                llmTtftMs,
+                ttfcMs: ttfc,
+              },
+            }).end({})
+          }
+          this.sendMessageTime = null
           this.sendEvent('client', 'tts_done', { totalBytes })
           // 100ms silence flushes the last meaningful chunk through FreeSWITCH's buffer.
           const silenceBytes = (8000 * 2 * 100) / 1000
           if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.alloc(silenceBytes, 0))
         } catch (err: any) {
           this.logError('TTS error:', err)
+          ttsSpan?.end({ endTime: new Date(), level: 'ERROR', statusMessage: String(err?.message ?? err) })
           this.sendEvent('client', 'tts_error', { message: String(err?.message ?? err) })
         }
       }
@@ -279,11 +345,16 @@ export class CallSession {
     await this.realtimeSession.connect({ apiKey: process.env.OPENAI_API_KEY! })
 
     // 6. Connect ASR client; on transcript → forward event + feed isFinal to agent
+    const asrParams = {
+      speechTimeout: mp.asr_speech_timeout != null ? String(mp.asr_speech_timeout) : undefined,
+      silenceTimeout: mp.asr_silence_timeout != null ? String(mp.asr_silence_timeout) : undefined,
+      speechMax: mp.asr_speech_max != null ? String(mp.asr_speech_max) : undefined,
+    }
     this.asrClient = new AsrClient(process.env.ASR_PROXY_URL ?? 'ws://localhost:8082')
-    await this.asrClient.connect()
+    await this.asrClient.connect(asrParams)
     this.asrClient.onTranscript((transcript, isFinal) => {
       this.sendEvent('client', 'asr_transcript', { transcript, isFinal })
-      if (!this.botSpokenOnce) return  // discard all input until bot has spoken first
+      if (!this.botSpokenOnce) return
       if (isFinal && transcript.trim()) {
         if (this.isProcessing || this.isPlayingAudio) {
           this.log(`ASR suppressed (processing=${this.isProcessing} playing=${this.isPlayingAudio}): "${transcript.trim().substring(0, 80)}"`)
@@ -291,8 +362,12 @@ export class CallSession {
         }
         const text = transcript.trim()
         this.log(`USER: "${text.substring(0, 200)}"`)
+        this.trace?.span({ name: 'asr', input: text }).end({ output: text })
         this.addUserMessage(text, transcript)
         this.isProcessing = true
+        this.sendMessageTime = new Date()
+        this.turnLlmStartTime = null
+        this.turnLlmFirstTokenTime = null
         this.realtimeSession?.sendMessage(text)
         this.sendEvent('client', 'send_message', { text })
       }
@@ -373,7 +448,9 @@ export class CallSession {
     this.closed = true
     if (!this.endTime) this.endTime = new Date()
 
+    this.trace?.update({ endTime: this.endTime })
     await this.flushHistory()
+    await flushTelemetry()
 
     if (this.endcallFallbackTimer) {
       clearTimeout(this.endcallFallbackTimer)

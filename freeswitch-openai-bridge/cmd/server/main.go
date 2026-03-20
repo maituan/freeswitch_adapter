@@ -39,29 +39,31 @@ var (
 )
 
 type preCallData struct {
-	Scenario   string
-	VoiceID    string
-	Phone      string
-	CustomData map[string]interface{}
-	RelayReady chan *relay.Client // buffered(1); closed on failure; nil = not pre-warmed
+	Scenario    string
+	VoiceID     string
+	Phone       string
+	CustomData  map[string]interface{}
+	MediaParams *relay.MediaParams
+	RelayReady  chan *relay.Client // buffered(1); closed on failure; nil = not pre-warmed
 }
 
 // prewarmRelay connects to the relay server in the background so it is ready
 // by the time the called party answers. The channel receives exactly one value
 // (the connected client) or is closed if the connection fails.
-func prewarmRelay(callUUID, scenario, phone, voiceID string, customData map[string]interface{}) chan *relay.Client {
+func prewarmRelay(callUUID, scenario, phone, voiceID string, customData map[string]interface{}, mediaParams *relay.MediaParams) chan *relay.Client {
 	ch := make(chan *relay.Client, 1)
 	go func() {
 		log.Printf("[Relay] pre-warm start uuid=%s scenario=%s", callUUID, scenario)
 		start := time.Now()
 		rc, err := relay.Connect(relay.ConnectParams{
-			RelayURL:   cfg.Relay.URL,
-			CallID:     callUUID,
-			Scenario:   scenario,
-			Phone:      phone,
-			VoiceID:    voiceID,
-			APIKey:     cfg.Relay.APIKey,
-			CustomData: customData,
+			RelayURL:    cfg.Relay.URL,
+			CallID:      callUUID,
+			Scenario:    scenario,
+			Phone:       phone,
+			VoiceID:     voiceID,
+			APIKey:      cfg.Relay.APIKey,
+			CustomData:  customData,
+			MediaParams: mediaParams,
 		})
 		if err != nil {
 			log.Printf("[Relay] pre-warm failed uuid=%s elapsed=%dms: %v", callUUID, time.Since(start).Milliseconds(), err)
@@ -276,13 +278,14 @@ func handleAnswer(ev *eventsocket.Event) {
 	if relayClient == nil {
 		var err error
 		relayClient, err = relay.Connect(relay.ConnectParams{
-			RelayURL:   cfg.Relay.URL,
-			CallID:     uuid,
-			Scenario:   scenario,
-			Phone:      phone,
-			VoiceID:    pd.VoiceID,
-			APIKey:     cfg.Relay.APIKey,
-			CustomData: pd.CustomData,
+			RelayURL:    cfg.Relay.URL,
+			CallID:      uuid,
+			Scenario:    scenario,
+			Phone:       phone,
+			VoiceID:     pd.VoiceID,
+			APIKey:      cfg.Relay.APIKey,
+			CustomData:  pd.CustomData,
+			MediaParams: pd.MediaParams,
 		})
 		if err != nil {
 			log.Printf("[Call] relay connect failed: %v", err)
@@ -534,6 +537,7 @@ type callRequest struct {
 	Plate       string                 `json:"plate"`
 	VoiceID     string                 `json:"voice_id"`
 	CustomData  map[string]interface{} `json:"custom_data"`
+	MediaParams *relay.MediaParams     `json:"media_params"`
 }
 
 func handleVoicesAPI(w http.ResponseWriter, r *http.Request) {
@@ -621,11 +625,12 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 		phone = req.SIPEndpoint
 	}
 	pd := preCallData{
-		Scenario:   scenario,
-		VoiceID:    req.VoiceID,
-		Phone:      phone,
-		CustomData: cd,
-		RelayReady: prewarmRelay(callUUID, scenario, phone, req.VoiceID, cd),
+		Scenario:    scenario,
+		VoiceID:     req.VoiceID,
+		Phone:       phone,
+		CustomData:  cd,
+		MediaParams: req.MediaParams,
+		RelayReady:  prewarmRelay(callUUID, scenario, phone, req.VoiceID, cd, req.MediaParams),
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
@@ -657,7 +662,7 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 		Scenario:   scenario,
 		Phone:      phone,
 		CustomData: customData,
-		RelayReady: prewarmRelay(callUUID, scenario, phone, "", customData),
+		RelayReady: prewarmRelay(callUUID, scenario, phone, "", customData, nil),
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)

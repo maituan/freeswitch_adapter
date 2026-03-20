@@ -21,14 +21,22 @@ type ControlMsg struct {
 	EventData map[string]interface{} `json:"eventData,omitempty"`
 }
 
+type MediaParams struct {
+	ASRSpeechTimeout  string `json:"asr_speech_timeout,omitempty"`
+	ASRSilenceTimeout string `json:"asr_silence_timeout,omitempty"`
+	ASRSpeechMax      string `json:"asr_speech_max,omitempty"`
+	TTSTempo          string `json:"tts_tempo,omitempty"`
+}
+
 type ConnectParams struct {
-	RelayURL   string
-	CallID     string
-	Scenario   string
-	Phone      string
-	VoiceID    string
-	APIKey     string
-	CustomData map[string]interface{}
+	RelayURL    string
+	CallID      string
+	Scenario    string
+	Phone       string
+	VoiceID     string
+	APIKey      string
+	CustomData  map[string]interface{}
+	MediaParams *MediaParams
 }
 
 type writeMsg struct {
@@ -62,6 +70,10 @@ func Connect(params ConnectParams) (*Client, error) {
 	if len(params.CustomData) > 0 {
 		cd, _ := json.Marshal(params.CustomData)
 		q.Set("customData", string(cd))
+	}
+	if params.MediaParams != nil {
+		mp, _ := json.Marshal(params.MediaParams)
+		q.Set("mediaParams", string(mp))
 	}
 	u.RawQuery = q.Encode()
 

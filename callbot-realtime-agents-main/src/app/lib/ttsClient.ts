@@ -24,12 +24,14 @@ export function getTtsWebsocketUri(): string {
 const TTS_WEBSOCKET_URI = getTtsWebsocketUri();
 const ELEVEN_LABS_VOICE_STABILITY = '0.5';
 const ELEVEN_LABS_VOICE_SIMILARITY_BOOST = '0.7';
+const TTS_TEMPO = process.env.TTS_TEMPO ? parseFloat(process.env.TTS_TEMPO) : undefined;
 
 export interface TTSConfig {
   voiceId?: string;
   resampleRate?: number;
   stability?: number;
   similarityBoost?: number;
+  tempo?: number;
 }
 
 interface AudioChunk {
@@ -192,17 +194,18 @@ export async function generateTTSAudio(
     resampleRate = 8000,
     stability = parseFloat(ELEVEN_LABS_VOICE_STABILITY),
     similarityBoost = parseFloat(ELEVEN_LABS_VOICE_SIMILARITY_BOOST),
+    tempo = TTS_TEMPO,
   } = config;
 
   return new Promise((resolve, reject) => {
     const audioChunks: Buffer[] = [];
     let isConnected = false;
     const startTime = Date.now();
-    
+
     console.log(`[TTS] Connecting to ${TTS_WEBSOCKET_URI}...`);
-    
+
     const ws = new WebSocket(TTS_WEBSOCKET_URI);
-    
+
     // Set timeout for connection
     const connectionTimeout = setTimeout(() => {
       if (!isConnected) {
@@ -210,21 +213,23 @@ export async function generateTTSAudio(
         reject(new Error('TTS WebSocket connection timeout'));
       }
     }, 10000);
-    
+
     ws.on('open', () => {
       isConnected = true;
       clearTimeout(connectionTimeout);
       console.log(`[TTS] Connected in ${Date.now() - startTime}ms`);
-      
+
       // Send initial configuration
+      const voiceSettings: Record<string, any> = {
+        voiceId,
+        resample_rate: resampleRate,
+        stability,
+        similarity_boost: similarityBoost,
+      };
+      if (tempo !== undefined) voiceSettings['tempo'] = tempo;
       const initialConfig = {
         text: " ",
-        voice_settings: {
-          voiceId,
-          resample_rate: resampleRate,
-          stability,
-          similarity_boost: similarityBoost,
-        },
+        voice_settings: voiceSettings,
         generator_config: {
           chunk_length_schedule: [150],
         },
@@ -358,11 +363,12 @@ export async function* streamTTSAudio(
     resampleRate = 8000,
     stability = parseFloat(ELEVEN_LABS_VOICE_STABILITY),
     similarityBoost = parseFloat(ELEVEN_LABS_VOICE_SIMILARITY_BOOST),
+    tempo = TTS_TEMPO,
   } = config;
 
   const ws = new WebSocket(TTS_WEBSOCKET_URI);
   const startTime = Date.now();
-  
+
   // Wait for connection
   await new Promise<void>((resolve, reject) => {
     ws.on('open', () => {
@@ -370,19 +376,21 @@ export async function* streamTTSAudio(
       resolve();
     });
     ws.on('error', reject);
-    
+
     setTimeout(() => reject(new Error('Connection timeout')), 10000);
   });
-  
+
   // Send initial configuration
+  const voiceSettings: Record<string, any> = {
+    voiceId,
+    resample_rate: resampleRate,
+    stability,
+    similarity_boost: similarityBoost,
+  };
+  if (tempo !== undefined) voiceSettings['tempo'] = tempo;
   ws.send(JSON.stringify({
     text: " ",
-    voice_settings: {
-      voiceId,
-      resample_rate: resampleRate,
-      stability,
-      similarity_boost: similarityBoost,
-    },
+    voice_settings: voiceSettings,
     generator_config: {
       chunk_length_schedule: [20],
     },

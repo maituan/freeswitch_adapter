@@ -36,7 +36,7 @@ export class AsrClient extends EventEmitter {
     );
   }
 
-  public startStream(): boolean {
+  public startStream(overrides: { speechTimeout?: string; silenceTimeout?: string; speechMax?: string } = {}): boolean {
     if (this.isConnected) {
       this.stopStream();
     }
@@ -55,9 +55,9 @@ export class AsrClient extends EventEmitter {
     metadata.add('single-sentence', process.env.ASR_SINGLE_SENTENCE || 'False');
     metadata.add('token', token);
     metadata.add('id', process.env.ASR_CLIENT_ID || `client_${Date.now()}`);
-    metadata.add('silence_timeout', process.env.ASR_SILENCE_TIMEOUT || '10');
-    metadata.add('speech_timeout', process.env.ASR_SPEECH_TIMEOUT || '1');
-    metadata.add('speech_max', process.env.ASR_SPEECH_MAX || '30');
+    metadata.add('silence_timeout', overrides.silenceTimeout ?? process.env.ASR_SILENCE_TIMEOUT ?? '10');
+    metadata.add('speech_timeout', overrides.speechTimeout ?? process.env.ASR_SPEECH_TIMEOUT ?? '1');
+    metadata.add('speech_max', overrides.speechMax ?? process.env.ASR_SPEECH_MAX ?? '30');
 
     this.call = this.client.SendVoice(metadata);
     this.isConnected = true;

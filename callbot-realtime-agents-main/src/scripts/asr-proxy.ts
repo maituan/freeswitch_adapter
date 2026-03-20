@@ -43,21 +43,17 @@ wss.on('connection', (ws: WebSocket) => {
   ws.on('message', (message: WebSocket.Data, isBinary: boolean) => {
     try {
       if (isBinary) {
-        // Audio chunk
-        if (!asrClient || !isStreamStarted) {
-            // Auto start stream if receiving audio
-            initAsrClient();
-            if (asrClient) {
-                const started = asrClient.startStream();
-                isStreamStarted = started;
-                if (started) {
-                  console.log('[ASR Proxy] Auto-started gRPC stream');
-                } else if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: 'error', message: 'ASR stream not started. Missing ASR_TOKEN?' }));
-                }
-            }
+        // Audio chunk — auto-start if no explicit 'start' message was received
+        if (!asrClient) initAsrClient();
+        if (asrClient && !isStreamStarted) {
+          const started = asrClient.startStream();
+          isStreamStarted = started;
+          if (started) {
+            console.log('[ASR Proxy] Auto-started gRPC stream');
+          } else if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'error', message: 'ASR stream not started. Missing ASR_TOKEN?' }));
+          }
         }
-
         if (asrClient && isStreamStarted) {
           const buffer = Buffer.isBuffer(message)
             ? Buffer.from(message)
@@ -73,7 +69,12 @@ wss.on('connection', (ws: WebSocket) => {
           console.log('[ASR Proxy] Received START command');
           initAsrClient();
           if (asrClient) {
-            const started = asrClient.startStream();
+            const overrides = {
+              speechTimeout: msg.speechTimeout ? String(msg.speechTimeout) : undefined,
+              silenceTimeout: msg.silenceTimeout ? String(msg.silenceTimeout) : undefined,
+              speechMax: msg.speechMax ? String(msg.speechMax) : undefined,
+            };
+            const started = asrClient.startStream(overrides);
             isStreamStarted = started;
             if (!started && ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'error', message: 'ASR stream not started. Missing ASR_TOKEN?' }));

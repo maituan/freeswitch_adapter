@@ -26,7 +26,8 @@ Content-Type: application/json
 | `gender` | string | Không | Shortcut — tương đương `custom_data.gender` |
 | `name` | string | Không | Shortcut — tương đương `custom_data.name` |
 | `plate` | string | Không | Shortcut — tương đương `custom_data.plate` |
-| `custom_data` | object | Không | Dữ liệu tùy ý truyền vào agent (xem bên dưới) |
+| `custom_data` | object | Không | Dữ liệu nghiệp vụ truyền vào agent (xem bên dưới) |
+| `media_params` | object | Không | Tham số ASR/TTS override cho cuộc gọi này (xem bên dưới) |
 
 > `phone` và `sip_endpoint` chỉ cần truyền 1 trong 2. Nếu có cả hai, `sip_endpoint` được dùng làm đích gọi.
 
@@ -184,9 +185,37 @@ Sau khi cuộc gọi kết thúc, hệ thống tự động push lên topic `KAF
 
 ---
 
+## `media_params` — Tham số ASR/TTS
+
+Dùng để override cấu hình ASR và TTS cho từng cuộc gọi cụ thể, tách biệt hoàn toàn với `custom_data` (dữ liệu nghiệp vụ).
+
+Nếu không truyền, hệ thống dùng giá trị mặc định từ biến môi trường (`deploy/.env`).
+
+```json
+{
+  "media_params": {
+    "asr_speech_timeout":  "2",
+    "asr_silence_timeout": "8",
+    "asr_speech_max":      "25",
+    "tts_tempo":           "1.15"
+  }
+}
+```
+
+| Field | Type | Default (env) | Mô tả |
+|---|---|---|---|
+| `asr_speech_timeout` | string (số giây) | `ASR_SPEECH_TIMEOUT=1` | Thời gian chờ tối thiểu để xác nhận user bắt đầu nói |
+| `asr_silence_timeout` | string (số giây) | `ASR_SILENCE_TIMEOUT=10` | Thời gian im lặng sau khi nói để ASR kết thúc câu |
+| `asr_speech_max` | string (số giây) | `ASR_SPEECH_MAX=30` | Độ dài tối đa một câu nói (ASR cắt tại đây) |
+| `tts_tempo` | string (float) | `TTS_TEMPO` (unset) | Tốc độ đọc TTS: `1.0` = bình thường, `1.2` = nhanh hơn, `0.8` = chậm hơn |
+
+> **Lưu ý:** Tất cả giá trị truyền dưới dạng **string** để tương thích với gRPC metadata.
+
+---
+
 ## Ví dụ
 
-### Gọi theo số điện thoại
+### Gọi cơ bản theo số điện thoại
 
 ```bash
 curl -X POST http://bridge-host:8083/api/call \
@@ -195,7 +224,7 @@ curl -X POST http://bridge-host:8083/api/call \
     "phone":     "0901234567",
     "caller_id": "02812345678",
     "scenario":  "leadgenMultiAgent",
-    "voice_id":  "vi-VN-HoaiMyNeural",
+    "voice_id":  "phuongnhi-north",
     "custom_data": {
       "session_id":          "sess-001",
       "lead_id":             "LEAD-999",
@@ -213,6 +242,29 @@ curl -X POST http://bridge-host:8083/api/call \
   }'
 ```
 
+### Gọi với override ASR/TTS
+
+```bash
+curl -X POST http://bridge-host:8083/api/call \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone":     "0901234567",
+    "caller_id": "02812345678",
+    "scenario":  "leadgenMultiAgent",
+    "voice_id":  "phuongnhi-north",
+    "custom_data": {
+      "session_id": "sess-002",
+      "lead_id":    "LEAD-1000",
+      "name":       "Trần Thị C"
+    },
+    "media_params": {
+      "asr_silence_timeout": "6",
+      "asr_speech_max":      "20",
+      "tts_tempo":           "1.1"
+    }
+  }'
+```
+
 ### Gọi qua SIP endpoint
 
 ```bash
@@ -222,11 +274,11 @@ curl -X POST http://bridge-host:8083/api/call \
     "sip_endpoint": "0901234567@10.0.0.5",
     "caller_id":    "02812345678",
     "scenario":     "leadgenMultiAgent",
-    "voice_id":     "vi-VN-HoaiMyNeural",
+    "voice_id":     "phuongnhi-north",
     "custom_data": {
-      "session_id": "sess-002",
-      "lead_id":    "LEAD-1000",
-      "name":       "Trần Thị C"
+      "session_id": "sess-003",
+      "lead_id":    "LEAD-1001",
+      "name":       "Lê Văn D"
     }
   }'
 ```
