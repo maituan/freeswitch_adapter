@@ -241,6 +241,7 @@ export class CallSession {
         if (!this.llmFirstTokenTime) {
           this.llmFirstTokenTime = new Date()
           if (!this.turnLlmFirstTokenTime) this.turnLlmFirstTokenTime = this.llmFirstTokenTime
+          this.log(`response.text.delta FIRST TOKEN (turnLlmFirstTokenTime set)`)
         }
         const delta = event?.delta ?? ''
         if (delta) this.feedLlmToken(delta)
@@ -278,6 +279,7 @@ export class CallSession {
       const cmd  = extractControlCommand(rawText)
 
       this.log(`BOT: "${rawText.substring(0, 300)}"`)  // rawText includes control tags
+      this.log(`agent_end state: streamingTts=${!!this.streamingTts} turnLlmFirstTokenTime=${!!this.turnLlmFirstTokenTime} llmTextBuffer=${this.llmTextBuffer.length}chars`)
       this.botSpokenOnce = true
       this.sendEvent('server', 'agent_end', { rawText, text })
 
@@ -404,6 +406,7 @@ export class CallSession {
         }
       } else {
         // No text to speak — clean up any streaming state from tool-call-only response
+        this.log(`agent_end NO TEXT — resetting streaming state (had streamingTts=${!!this.streamingTts})`)
         this.resetStreamingTtsState()
       }
 
