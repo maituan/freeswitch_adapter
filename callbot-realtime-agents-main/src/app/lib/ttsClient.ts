@@ -43,7 +43,7 @@ interface AudioChunk {
 /**
  * Normalize text for better TTS pronunciation (Vietnamese specific)
  */
-function normalizeText(text: string): string {
+export function normalizeText(text: string): string {
   const normalizeCurrencyAmounts = (input: string) => {
     /**
      * Make money amounts speak-friendly for Vietnamese TTS:
@@ -480,6 +480,150 @@ export async function* streamTTSAudio(
   }
   
   ws.close();
+}
+
+/**
+ * Streaming TTS client — allows sending text incrementally (e.g. token-by-token
+ * from an LLM) instead of waiting for the full response. Audio chunks are
+ * yielded as they arrive from the TTS server.
+ */
+export class StreamingTTS {
+  private ws: WebSocket | null = null
+  private audioQueue: Buffer[] = []
+  private audioWaiters: ((result: IteratorResult<Buffer>) => void)[] = []
+  private done = false
+  private wsError: Error | null = null
+  private pendingTexts: string[] = []
+  private connected = false
+  private config: TTSConfig
+
+  constructor(config: TTSConfig = {}) {
+    this.config = config
+  }
+
+  async connect(): Promise<void> {
+    const {
+      voiceId = 'phuongnhi-north',
+      resampleRate = 8000,
+      stability = parseFloat(ELEVEN_LABS_VOICE_STABILITY),
+      similarityBoost = parseFloat(ELEVEN_LABS_VOICE_SIMILARITY_BOOST),
+      tempo = TTS_TEMPO,
+    } = this.config
+
+    this.ws = new WebSocket(TTS_WEBSOCKET_URI)
+    const startTime = Date.now()
+
+    await new Promise<void>((resolve, reject) => {
+      this.ws!.on('open', () => {
+        console.log(`[TTS Streaming] Connected in ${Date.now() - startTime}ms`)
+        resolve()
+      })
+      this.ws!.on('error', reject)
+      setTimeout(() => reject(new Error('TTS streaming connection timeout')), 10000)
+    })
+
+    // Send initial configuration
+    const voiceSettings: Record<string, any> = {
+      voiceId,
+      resample_rate: resampleRate,
+      stability,
+      similarity_boost: similarityBoost,
+    }
+    if (tempo !== undefined) voiceSettings.tempo = tempo
+
+    this.ws.send(JSON.stringify({
+      text: ' ',
+      voice_settings: voiceSettings,
+      generator_config: { chunk_length_schedule: [20] },
+      xi_api_key: 'ws_3f9e7cba-d8e4-4b6a-9c73-9c9f5e2c8d21',
+    }))
+
+    // Wire up audio receiving
+    this.ws.on('message', (data: WebSocket.Data) => {
+      try {
+        const msg: AudioChunk = JSON.parse(data.toString())
+        if (msg.audio) {
+          const buf = Buffer.from(msg.audio, 'base64')
+          if (this.audioWaiters.length > 0) {
+            this.audioWaiters.shift()!({ value: buf, done: false })
+          } else {
+            this.audioQueue.push(buf)
+          }
+        } else if (msg.isFinal) {
+          this.done = true
+          for (const w of this.audioWaiters) w({ value: undefined as any, done: true })
+          this.audioWaiters = []
+        } else if (msg.error) {
+          this.wsError = new Error(`TTS service error: ${msg.error}`)
+          this.done = true
+          for (const w of this.audioWaiters) w({ value: undefined as any, done: true })
+          this.audioWaiters = []
+        }
+      } catch {}
+    })
+
+    this.ws.on('close', () => {
+      this.done = true
+      for (const w of this.audioWaiters) w({ value: undefined as any, done: true })
+      this.audioWaiters = []
+    })
+
+    this.ws.on('error', (err: Error) => {
+      this.wsError = err
+      this.done = true
+      for (const w of this.audioWaiters) w({ value: undefined as any, done: true })
+      this.audioWaiters = []
+    })
+
+    this.connected = true
+
+    // Flush any text that was queued before connection completed
+    for (const t of this.pendingTexts) {
+      this.ws.send(JSON.stringify({ text: t }))
+    }
+    this.pendingTexts = []
+  }
+
+  /** Send a text chunk to TTS. Normalizes text before sending. */
+  sendText(text: string): void {
+    const normalized = normalizeText(text)
+    if (!normalized) return
+    if (this.connected && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ text: normalized }))
+    } else {
+      this.pendingTexts.push(normalized)
+    }
+  }
+
+  /** Signal end of text input. */
+  finish(): void {
+    if (this.connected && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ text: '' }))
+    }
+  }
+
+  /** Async generator yielding audio Buffer chunks as they arrive. */
+  async *audioChunks(): AsyncGenerator<Buffer> {
+    while (true) {
+      if (this.wsError) throw this.wsError
+      if (this.audioQueue.length > 0) {
+        yield this.audioQueue.shift()!
+        continue
+      }
+      if (this.done) return
+      const result = await new Promise<IteratorResult<Buffer>>((resolve) => {
+        this.audioWaiters.push(resolve)
+      })
+      if (result.done) return
+      yield result.value
+    }
+  }
+
+  close(): void {
+    try { this.ws?.close() } catch {}
+    this.ws = null
+    this.connected = false
+  }
 }
 
 /**

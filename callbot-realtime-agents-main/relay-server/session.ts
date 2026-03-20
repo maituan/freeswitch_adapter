@@ -3,7 +3,7 @@ import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
 import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext } from '../src/app/agentConfigs/leadgenMultiAgent'
 import { AsrClient } from './asrClient'
-import { streamTTSAudio } from '../src/app/lib/ttsClient'
+import { streamTTSAudio, StreamingTTS } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
 import { createCallTrace, flushTelemetry } from './telemetry'
 
@@ -77,6 +77,17 @@ export class CallSession {
   // available when agent_end fires (which may be after multiple tool-call rounds).
   private turnLlmStartTime: Date | null = null
   private turnLlmFirstTokenTime: Date | null = null
+  // Streaming TTS state
+  private streamingTts: StreamingTTS | null = null
+  private llmTextBuffer = ''
+  private ttsConnectPromise: Promise<void> | null = null
+  private ttsAudioPromise: Promise<void> | null = null
+  private ttsStreamStartTime: Date | null = null
+  private ttsConnectedTime: Date | null = null
+  private ttsFirstSentenceTime: Date | null = null
+  private ttsFirstChunkTime: Date | null = null
+  private ttsTotalBytes = 0
+  private ttsChunkIdx = 0
 
   constructor(
     private ws: WebSocket,
@@ -226,9 +237,13 @@ export class CallSession {
         this.llmFirstTokenTime = null
         if (!this.turnLlmStartTime) this.turnLlmStartTime = this.llmGenStartTime
         this.logDebug('response.created → isProcessing=true')
-      } else if (event?.type === 'response.text.delta' && !this.llmFirstTokenTime) {
-        this.llmFirstTokenTime = new Date()
-        if (!this.turnLlmFirstTokenTime) this.turnLlmFirstTokenTime = this.llmFirstTokenTime
+      } else if (event?.type === 'response.text.delta') {
+        if (!this.llmFirstTokenTime) {
+          this.llmFirstTokenTime = new Date()
+          if (!this.turnLlmFirstTokenTime) this.turnLlmFirstTokenTime = this.llmFirstTokenTime
+        }
+        const delta = event?.delta ?? ''
+        if (delta) this.feedLlmToken(delta)
       } else if (event?.type === 'response.done') {
         this.isProcessing = false
         const r = event?.response ?? {}
@@ -269,62 +284,127 @@ export class CallSession {
       if (text.trim()) {
         this.addAssistantMessage(text, rawText)
         this.sendEvent('client', 'tts_start', { text })
-        const ttsStartTime = new Date()
-        const ttsSpan = this.trace?.span({ name: 'tts', startTime: ttsStartTime, input: text })
-        try {
-          let totalBytes = 0
-          let chunkIdx = 0
-          let firstChunkTime: Date | null = null
-          const streamStart = Date.now()
-          const ttsVoice = this.opts.voiceId || undefined
-          const ttsTempo = mp.tts_tempo != null ? Number(mp.tts_tempo) : undefined
-          for await (const chunk of streamTTSAudio(text, { resampleRate: 8000, voiceId: ttsVoice, tempo: ttsTempo })) {
-            chunkIdx++
-            if (chunkIdx === 1) firstChunkTime = new Date()
-            totalBytes += chunk.length
-            if (MUTE_DURING_PLAYBACK) {
-              const elapsed = Date.now() - streamStart
-              const remaining = Math.max(pcmDurationMs(totalBytes) - elapsed + 300, 300)
-              this.setPlaybackMute(remaining)
+
+        if (this.streamingTts) {
+          // ── Streaming TTS path: text was already being fed during LLM generation ──
+          try {
+            // Wait for TTS WS connection if still in progress
+            if (this.ttsConnectPromise) await this.ttsConnectPromise
+            if (!this.streamingTts) throw new Error('Streaming TTS connection failed')
+
+            // Flush remaining buffer (strip control tags from leftovers)
+            const remaining = stripControlTags(this.llmTextBuffer).trim()
+            if (remaining) {
+              if (!this.ttsFirstSentenceTime) this.ttsFirstSentenceTime = new Date()
+              this.streamingTts.sendText(remaining)
             }
-            if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk)
-          }
-          const ttsElapsed = Date.now() - streamStart
-          const ttfc = firstChunkTime ? firstChunkTime.getTime() - ttsStartTime.getTime() : null
-          const pipelineMs = (firstChunkTime && this.sendMessageTime)
-            ? firstChunkTime.getTime() - this.sendMessageTime.getTime()
-            : null
-          this.log(`TTS done chunks=${chunkIdx} bytes=${totalBytes} elapsed=${ttsElapsed}ms ttfc=${ttfc ?? '?'}ms pipeline=${pipelineMs ?? '?'}ms voice=${ttsVoice ?? 'default'}`)
-          ttsSpan?.end({ endTime: new Date(), output: { totalBytes, elapsedMs: ttsElapsed, ttfcMs: ttfc, voice: ttsVoice ?? 'default' } })
-          if (this.trace && this.sendMessageTime && firstChunkTime) {
-            const asrToLlmMs = this.turnLlmStartTime
-              ? this.turnLlmStartTime.getTime() - this.sendMessageTime.getTime()
-              : null
+            this.llmTextBuffer = ''
+            this.streamingTts.finish()
+
+            // Wait for all audio chunks to be consumed
+            await this.ttsAudioPromise
+
+            const ttsElapsed = this.ttsStreamStartTime ? Date.now() - this.ttsStreamStartTime.getTime() : 0
+            const pipelineMs = (this.ttsFirstChunkTime && this.sendMessageTime)
+              ? this.ttsFirstChunkTime.getTime() - this.sendMessageTime.getTime() : null
+            const ttsVoice = this.opts.voiceId || 'default'
+
+            // Granular latency breakdown
+            const asrToLlmMs = (this.turnLlmStartTime && this.sendMessageTime)
+              ? this.turnLlmStartTime.getTime() - this.sendMessageTime.getTime() : null
             const llmTtftMs = (this.turnLlmFirstTokenTime && this.turnLlmStartTime)
-              ? this.turnLlmFirstTokenTime.getTime() - this.turnLlmStartTime.getTime()
-              : null
-            this.trace.span({
-              name: 'pipeline-latency',
-              startTime: this.sendMessageTime,
-              endTime: firstChunkTime,
-              output: {
-                totalPipelineMs: pipelineMs,
-                asrToLlmMs,
-                llmTtftMs,
-                ttfcMs: ttfc,
-              },
-            }).end({})
+              ? this.turnLlmFirstTokenTime.getTime() - this.turnLlmStartTime.getTime() : null
+            const firstSentenceMs = (this.ttsFirstSentenceTime && this.ttsStreamStartTime)
+              ? this.ttsFirstSentenceTime.getTime() - this.ttsStreamStartTime.getTime() : null
+            const ttsLatencyMs = (this.ttsFirstChunkTime && this.ttsFirstSentenceTime)
+              ? this.ttsFirstChunkTime.getTime() - this.ttsFirstSentenceTime.getTime() : null
+            const ttsConnectMs = (this.ttsConnectedTime && this.ttsStreamStartTime)
+              ? this.ttsConnectedTime.getTime() - this.ttsStreamStartTime.getTime() : null
+
+            this.log(`TTS done (streaming) chunks=${this.ttsChunkIdx} bytes=${this.ttsTotalBytes} elapsed=${ttsElapsed}ms pipeline=${pipelineMs ?? '?'}ms voice=${ttsVoice} | asrToLlm=${asrToLlmMs ?? '?'}ms llmTtft=${llmTtftMs ?? '?'}ms firstSentence=${firstSentenceMs ?? '?'}ms ttsLatency=${ttsLatencyMs ?? '?'}ms ttsConnect=${ttsConnectMs ?? '?'}ms`)
+
+            const ttsSpan = this.trace?.span({ name: 'tts', startTime: this.ttsStreamStartTime!, input: text })
+            ttsSpan?.end({ endTime: new Date(), output: { totalBytes: this.ttsTotalBytes, elapsedMs: ttsElapsed, ttsConnectMs, voice: ttsVoice, streaming: true } })
+
+            if (this.trace && this.sendMessageTime && this.ttsFirstChunkTime) {
+              this.trace.span({
+                name: 'pipeline-latency',
+                startTime: this.sendMessageTime,
+                endTime: this.ttsFirstChunkTime,
+                output: {
+                  totalPipelineMs: pipelineMs,
+                  asrToLlmMs,
+                  llmTtftMs,
+                  firstSentenceMs,
+                  ttsLatencyMs,
+                  ttsConnectMs,
+                },
+              }).end({})
+            }
+
+            this.sendMessageTime = null
+            this.sendEvent('client', 'tts_done', { totalBytes: this.ttsTotalBytes })
+            const silenceBytes = (8000 * 2 * 100) / 1000
+            if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.alloc(silenceBytes, 0))
+          } catch (err: any) {
+            this.logError('TTS streaming error:', err)
+            this.sendEvent('client', 'tts_error', { message: String(err?.message ?? err) })
+          } finally {
+            this.resetStreamingTtsState()
           }
-          this.sendMessageTime = null
-          this.sendEvent('client', 'tts_done', { totalBytes })
-          // 100ms silence flushes the last meaningful chunk through FreeSWITCH's buffer.
-          const silenceBytes = (8000 * 2 * 100) / 1000
-          if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.alloc(silenceBytes, 0))
-        } catch (err: any) {
-          this.logError('TTS error:', err)
-          ttsSpan?.end({ endTime: new Date(), level: 'ERROR', statusMessage: String(err?.message ?? err) })
-          this.sendEvent('client', 'tts_error', { message: String(err?.message ?? err) })
+        } else {
+          // ── Fallback: non-streaming TTS (e.g. streaming connect failed) ──
+          const ttsStartTime = new Date()
+          const ttsSpan = this.trace?.span({ name: 'tts', startTime: ttsStartTime, input: text })
+          try {
+            let totalBytes = 0
+            let chunkIdx = 0
+            let firstChunkTime: Date | null = null
+            const streamStart = Date.now()
+            const ttsVoice = this.opts.voiceId || undefined
+            const ttsTempo = mp.tts_tempo != null ? Number(mp.tts_tempo) : undefined
+            for await (const chunk of streamTTSAudio(text, { resampleRate: 8000, voiceId: ttsVoice, tempo: ttsTempo })) {
+              chunkIdx++
+              if (chunkIdx === 1) firstChunkTime = new Date()
+              totalBytes += chunk.length
+              if (MUTE_DURING_PLAYBACK) {
+                const elapsed = Date.now() - streamStart
+                const remaining = Math.max(pcmDurationMs(totalBytes) - elapsed + 300, 300)
+                this.setPlaybackMute(remaining)
+              }
+              if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk)
+            }
+            const ttsElapsed = Date.now() - streamStart
+            const ttfc = firstChunkTime ? firstChunkTime.getTime() - ttsStartTime.getTime() : null
+            const pipelineMs = (firstChunkTime && this.sendMessageTime)
+              ? firstChunkTime.getTime() - this.sendMessageTime.getTime() : null
+            this.log(`TTS done chunks=${chunkIdx} bytes=${totalBytes} elapsed=${ttsElapsed}ms ttfc=${ttfc ?? '?'}ms pipeline=${pipelineMs ?? '?'}ms voice=${ttsVoice ?? 'default'}`)
+            ttsSpan?.end({ endTime: new Date(), output: { totalBytes, elapsedMs: ttsElapsed, ttfcMs: ttfc, voice: ttsVoice ?? 'default' } })
+            if (this.trace && this.sendMessageTime && firstChunkTime) {
+              const asrToLlmMs = this.turnLlmStartTime
+                ? this.turnLlmStartTime.getTime() - this.sendMessageTime.getTime() : null
+              const llmTtftMs = (this.turnLlmFirstTokenTime && this.turnLlmStartTime)
+                ? this.turnLlmFirstTokenTime.getTime() - this.turnLlmStartTime.getTime() : null
+              this.trace.span({
+                name: 'pipeline-latency',
+                startTime: this.sendMessageTime,
+                endTime: firstChunkTime,
+                output: { totalPipelineMs: pipelineMs, asrToLlmMs, llmTtftMs, ttfcMs: ttfc },
+              }).end({})
+            }
+            this.sendMessageTime = null
+            this.sendEvent('client', 'tts_done', { totalBytes })
+            const silenceBytes = (8000 * 2 * 100) / 1000
+            if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.alloc(silenceBytes, 0))
+          } catch (err: any) {
+            this.logError('TTS error:', err)
+            ttsSpan?.end({ endTime: new Date(), level: 'ERROR', statusMessage: String(err?.message ?? err) })
+            this.sendEvent('client', 'tts_error', { message: String(err?.message ?? err) })
+          }
         }
+      } else {
+        // No text to speak — clean up any streaming state from tool-call-only response
+        this.resetStreamingTtsState()
       }
 
       if (cmd) {
@@ -432,6 +512,122 @@ export class CallSession {
     this.ws.on('error', () => { void this.cleanup() })
   }
 
+  // ── Streaming TTS helpers ──
+
+  private feedLlmToken(token: string): void {
+    this.llmTextBuffer += token
+
+    if (!this.streamingTts) {
+      this.initStreamingTts()
+      return // will flush buffer once connected
+    }
+
+    this.flushLlmBuffer()
+  }
+
+  private initStreamingTts(): void {
+    this.ttsStreamStartTime = new Date()
+    this.ttsConnectedTime = null
+    this.ttsFirstSentenceTime = null
+    this.ttsFirstChunkTime = null
+    this.ttsTotalBytes = 0
+    this.ttsChunkIdx = 0
+
+    const ttsVoice = this.opts.voiceId || undefined
+    const mp = this.opts.mediaParams ?? {}
+    const ttsTempo = mp.tts_tempo != null ? Number(mp.tts_tempo) : undefined
+    const tts = new StreamingTTS({ resampleRate: 8000, voiceId: ttsVoice, tempo: ttsTempo })
+    this.streamingTts = tts
+
+    this.ttsConnectPromise = tts.connect().then(() => {
+      this.ttsConnectedTime = new Date()
+      this.log('Streaming TTS connected, starting audio loop')
+      this.startTtsAudioLoop()
+      this.flushLlmBuffer()
+    }).catch((err) => {
+      this.logError('Streaming TTS connect failed:', err)
+      this.streamingTts = null
+    })
+  }
+
+  private flushLlmBuffer(): void {
+    if (!this.streamingTts) return
+    let chunk: string | null
+    while ((chunk = this.extractSentenceChunk()) !== null) {
+      if (!this.ttsFirstSentenceTime) this.ttsFirstSentenceTime = new Date()
+      this.streamingTts.sendText(chunk)
+    }
+  }
+
+  /**
+   * Extract a complete sentence from the LLM text buffer.
+   * Uses punctuation + whitespace as boundary to avoid splitting numbers like "480.700".
+   */
+  private extractSentenceChunk(): string | null {
+    // Sentence boundary: punctuation followed by whitespace
+    const match = this.llmTextBuffer.match(/^([\s\S]*?[.?!;]\s)/)
+    if (match && match[1].trim().length >= 5) {
+      const chunk = match[1]
+      this.llmTextBuffer = this.llmTextBuffer.substring(chunk.length)
+      return chunk.trim()
+    }
+    // Newline boundary
+    const nlIdx = this.llmTextBuffer.indexOf('\n')
+    if (nlIdx >= 5) {
+      const chunk = this.llmTextBuffer.substring(0, nlIdx + 1)
+      this.llmTextBuffer = this.llmTextBuffer.substring(nlIdx + 1)
+      return chunk.trim() || null
+    }
+    // Comma flush for long buffers (>150 chars)
+    if (this.llmTextBuffer.length > 150) {
+      const match2 = this.llmTextBuffer.match(/^([\s\S]*?,\s)/)
+      if (match2 && match2[1].length >= 20) {
+        const chunk = match2[1]
+        this.llmTextBuffer = this.llmTextBuffer.substring(chunk.length)
+        return chunk.trim()
+      }
+    }
+    return null
+  }
+
+  private startTtsAudioLoop(): void {
+    if (!this.streamingTts) return
+    const streamStart = Date.now()
+    this.ttsAudioPromise = (async () => {
+      try {
+        for await (const chunk of this.streamingTts!.audioChunks()) {
+          this.ttsChunkIdx++
+          if (this.ttsChunkIdx === 1) this.ttsFirstChunkTime = new Date()
+          this.ttsTotalBytes += chunk.length
+          if (MUTE_DURING_PLAYBACK) {
+            const elapsed = Date.now() - streamStart
+            const remaining = Math.max(pcmDurationMs(this.ttsTotalBytes) - elapsed + 300, 300)
+            this.setPlaybackMute(remaining)
+          }
+          if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk)
+        }
+      } catch (err: any) {
+        this.logError('TTS streaming audio loop error:', err)
+      }
+    })()
+  }
+
+  private resetStreamingTtsState(): void {
+    if (this.streamingTts) {
+      this.streamingTts.close()
+      this.streamingTts = null
+    }
+    this.ttsConnectPromise = null
+    this.ttsAudioPromise = null
+    this.ttsStreamStartTime = null
+    this.ttsConnectedTime = null
+    this.ttsFirstSentenceTime = null
+    this.ttsFirstChunkTime = null
+    this.ttsTotalBytes = 0
+    this.ttsChunkIdx = 0
+    this.llmTextBuffer = ''
+  }
+
   private setPlaybackMute(durationMs: number) {
     if (this.playbackMuteTimer) clearTimeout(this.playbackMuteTimer)
     this.isPlayingAudio = true
@@ -459,6 +655,7 @@ export class CallSession {
     if (this.playbackMuteTimer) clearTimeout(this.playbackMuteTimer)
     this.playbackMuteTimer = null
     this.isPlayingAudio = false
+    this.resetStreamingTtsState()
     this.asrClient?.close()
     this.realtimeSession?.close()
     this.asrClient = null
