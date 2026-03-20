@@ -1,0 +1,64 @@
+services:
+
+  # Next.js web UI + API routes — port 3000
+  callbot-agents:
+    build:
+      context: ../callbot-realtime-agents-main
+      dockerfile: Dockerfile
+    image: callbot-realtime-agents:latest
+    container_name: callbot-agents
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEXT_PUBLIC_OPENAI_MODEL=${NEXT_PUBLIC_OPENAI_MODEL:-gpt-4o-mini-realtime-preview}
+      - BRIDGE_URL=http://localhost:8083
+    command: ["npm", "run", "start"]
+
+  # Viettel ASR gRPC → WebSocket proxy — port 8082
+  callbot-asr-proxy:
+    build:
+      context: ../callbot-realtime-agents-main
+      dockerfile: Dockerfile
+    image: callbot-realtime-agents:latest
+    container_name: callbot-asr-proxy
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - ASR_TOKEN=${ASR_TOKEN}
+      - ASR_GRPC_URI=${ASR_GRPC_URI:-103.253.20.28:9000}
+      - ASR_PROXY_PORT=8086
+      - ASR_SILENCE_TIMEOUT=${ASR_SILENCE_TIMEOUT:-10}
+      - ASR_SPEECH_TIMEOUT=${ASR_SPEECH_TIMEOUT:-1}
+      - ASR_SPEECH_MAX=${ASR_SPEECH_MAX:-30}
+    command: ["npm", "run", "asr-proxy"]
+
+  # WebSocket relay server — receives audio from Go bridge, calls OpenAI + TTS — port 8091
+  callbot-relay:
+    build:
+      context: ../callbot-realtime-agents-main
+      dockerfile: Dockerfile
+    image: callbot-realtime-agents:latest
+    container_name: callbot-relay
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - DEBUG_LOGS=false
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini-realtime-preview}
+      - RELAY_PORT=8091
+      - RELAY_API_KEY=${RELAY_API_KEY:-}
+      - BASE_URL=http://localhost:3000
+      - ASR_PROXY_URL=ws://localhost:8086
+      - TTS_WEBSOCKET_URI=${TTS_WEBSOCKET_URI:-ws://103.253.20.27:8767}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-localhost:9092}
+      - KAFKA_CALL_HISTORY_TOPIC=${KAFKA_CALL_HISTORY_TOPIC:-call-history}
+      - TTS_TEMPO=${TTS_TEMPO:-}
+      - LANGFUSE_ENABLED=${LANGFUSE_ENABLED:-false}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-http://localhost:3001}
+    command: ["npm", "run", "relay"]
+    depends_on:
+      - callbot-agents
+      - callbot-asr-proxy

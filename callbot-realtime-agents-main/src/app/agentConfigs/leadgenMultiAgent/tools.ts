@@ -1,6 +1,7 @@
 import { tool } from '@openai/agents/realtime';
 import { calculateTndsFee } from './pricingEngine';
 import type { DiscountRate } from './pricingData';
+import { faqEntries } from './faqData';
 import {
   getLeadgenMultiAgentState,
   patchLeadgenMultiAgentState,
@@ -19,13 +20,6 @@ type CalcTndsFeeArgs = {
   weightTons?: number;
   discountPercent?: number;
 };
-
-function resolveSessionId(runContext: any): string {
-  const cd = runContext?.context?.customData ?? {};
-  return String(
-    cd.session_id ?? runContext?.context?.callId ?? '__default__'
-  ).trim() || '__default__';
-}
 
 function nonEmpty(value?: string): string | undefined {
   const trimmed = String(value ?? '').trim();
@@ -88,7 +82,7 @@ function formatRoundedPriceForSpeech(value?: number): string {
   return `${formatPlainNumber(millions)} triệu ${formatPlainNumber(thousands)} nghìn`;
 }
 
-export function formatExpiryDateForSpeech(raw?: string): string {
+function formatExpiryDateForSpeech(raw?: string): string {
   const value = String(raw ?? '').trim();
   if (!value) return 'tháng tới';
   if (!value.includes('/')) return value;
@@ -168,12 +162,8 @@ function buildPricingContext(state: LeadgenMultiAgentSessionState, args?: CalcTn
   };
 }
 
-function buildLeadgenScriptVars(
-  sessionId: string,
-  state: LeadgenMultiAgentSessionState,
-  args?: CalcTndsFeeArgs,
-) {
-  const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
+function buildLeadgenScriptVars(state: LeadgenMultiAgentSessionState, args?: CalcTndsFeeArgs) {
+  const runtime = getLeadgenMultiAgentRuntimeContext();
   const resolved = resolvePricingInputs(state, args);
   const purpose = derivePurposeLabel(resolved.isBusiness, state.slots.purpose);
   const vehicleDescription =
@@ -194,8 +184,6 @@ function buildLeadgenScriptVars(
     num_seats: resolved.seats ? String(resolved.seats) : '',
     purpose,
     expiry_date: formatExpiryDateForSpeech(state.slots.expiryDate),
-    brand: nonEmpty(state.slots.brand) ?? '',
-    color: nonEmpty(state.slots.color) ?? '',
     list_price: formatRoundedPriceForSpeech(state.pricing.listPrice),
     discount_price: formatRoundedPriceForSpeech(state.pricing.discountPrice),
     savings: formatRoundedPriceForSpeech(state.pricing.savings),
@@ -212,12 +200,8 @@ function buildLeadgenScriptVars(
   };
 }
 
-function buildQuoteReplyText(
-  sessionId: string,
-  state: LeadgenMultiAgentSessionState,
-  args?: CalcTndsFeeArgs,
-) {
-  const vars = buildLeadgenScriptVars(sessionId, state, args);
+function buildQuoteReplyText(state: LeadgenMultiAgentSessionState, args?: CalcTndsFeeArgs) {
+  const vars = buildLeadgenScriptVars(state, args);
 
   return `Dạ vâng. Với ${vars.vehicle_description} của mình, giá niêm yết là ${vars.list_price} một năm. Hôm nay bên em có ưu đãi, ${vars.gender} chỉ cần ${vars.discount_price} một năm, tiết kiệm ${vars.savings} ạ. Ngoài ra ${vars.gender} còn được tặng ${vars.gifts} ạ. Em sẽ gửi bản điện tử qua Zalo, bản giấy gửi về tận nhà. ${vars.gender} kiểm tra rồi mới thanh toán nhé.`;
 }
@@ -231,15 +215,14 @@ export const getLeadgenContextTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async (_args: unknown, runContext: any) => {
-    const sessionId = resolveSessionId(runContext);
-    const state = getLeadgenMultiAgentState(sessionId);
-    const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
+  execute: async () => {
+    const state = getLeadgenMultiAgentState();
+    const runtime = getLeadgenMultiAgentRuntimeContext();
     return {
       ok: true,
       state,
       runtime,
-      scriptVars: buildLeadgenScriptVars(sessionId, state),
+      scriptVars: buildLeadgenScriptVars(state),
       pricingContext: buildPricingContext(state),
     };
   },
@@ -252,8 +235,8 @@ export const updateLeadgenStateTool = tool({
     type: 'object',
     properties: {
       currentBuc: { type: 'string', enum: ['BUC_1', 'BUC_2', 'BUC_3', 'BUC_4', 'BUC_5'] },
-      slots: {
-        type: 'object',
+      slots: { 
+        type: 'object', 
         description: 'Thông tin thu thập được',
         properties: {
           vehicleType: { type: 'string', enum: ['car', 'pickup', 'truck'] },
@@ -266,10 +249,10 @@ export const updateLeadgenStateTool = tool({
           zaloNumber: { type: 'string', description: 'Số điện thoại Zalo' },
           email: { type: 'string', description: 'Email nhận thông tin bảo hiểm' },
           address: { type: 'string', description: 'Địa chỉ nhận ấn chỉ/quà' },
-          paymentPreference: { type: 'string', enum: ['cod', 'online'] },
-        },
+          paymentPreference: { type: 'string', enum: ['cod', 'online'] }
+        }
       },
-      outcome: {
+      outcome: { 
         type: 'object',
         description: 'Kết quả cuộc gọi (dùng khi kết thúc hoặc hẹn gọi lại)',
         properties: {
@@ -277,15 +260,14 @@ export const updateLeadgenStateTool = tool({
           issueType: { type: 'string' },
           level: { type: 'number' },
           callOutcome: { type: 'string', enum: ['Success', 'Rejection', 'Callback', 'NoAnswer'] },
-          followupAt: { type: 'string', description: 'Thời gian gọi lại nếu có' },
-        },
+          followupAt: { type: 'string', description: 'Thời gian gọi lại nếu có' }
+        }
       },
     },
     required: [],
     additionalProperties: false,
   },
-  execute: async (args: any, runContext: any) => {
-    const sessionId = resolveSessionId(runContext);
+  execute: async (args: any) => {
     const patch: any = {};
     if (args?.currentBuc) patch.currentBuc = args.currentBuc;
     if (args?.slots) patch.slots = args.slots;
@@ -295,15 +277,17 @@ export const updateLeadgenStateTool = tool({
         endedAt: new Date().toISOString(),
       };
     }
-    const nextState = patchLeadgenMultiAgentState(sessionId, patch);
+    const nextState = patchLeadgenMultiAgentState(patch);
     return {
       ok: true,
       state: nextState,
-      scriptVars: buildLeadgenScriptVars(sessionId, nextState),
+      scriptVars: buildLeadgenScriptVars(nextState),
       pricingContext: buildPricingContext(nextState),
     };
   },
 });
+
+
 
 export const calcTndsFeeTool = tool({
   name: 'calcTndsFee',
@@ -321,9 +305,8 @@ export const calcTndsFeeTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async (args: any, runContext: any) => {
-    const sessionId = resolveSessionId(runContext);
-    const state = getLeadgenMultiAgentState(sessionId);
+  execute: async (args: any) => {
+    const state = getLeadgenMultiAgentState();
     const resolved = resolvePricingInputs(state, args as CalcTndsFeeArgs);
     const missing = getMissingPricingSlots(resolved);
 
@@ -373,7 +356,7 @@ export const calcTndsFeeTool = tool({
       typeof listPrice === 'number' && typeof discountPrice === 'number'
         ? listPrice - discountPrice
         : undefined;
-    const nextState = patchLeadgenMultiAgentState(sessionId, {
+    const nextState = patchLeadgenMultiAgentState({
       slots: {
         vehicleType: resolved.vehicleType,
         ...(typeof resolved.seats === 'number' ? { numSeats: resolved.seats } : {}),
@@ -401,9 +384,53 @@ export const calcTndsFeeTool = tool({
       ...result,
       usedArgs: resolved,
       pricingState: nextState.pricing,
-      scriptVars: buildLeadgenScriptVars(sessionId, nextState, args as CalcTndsFeeArgs),
+      scriptVars: buildLeadgenScriptVars(nextState, args as CalcTndsFeeArgs),
       pricingContext: buildPricingContext(nextState, args as CalcTndsFeeArgs),
-      replyText: buildQuoteReplyText(sessionId, nextState, args as CalcTndsFeeArgs),
+      replyText: buildQuoteReplyText(nextState, args as CalcTndsFeeArgs),
+    };
+  },
+});
+
+const FAQ_INTENT_IDS = faqEntries.map((e) => e.intentId);
+
+export const lookupFaqTool = tool({
+  name: 'lookupFaq',
+  description:
+    'Tra cứu FAQ khi khách hỏi câu hỏi về bảo hiểm ngoài flow chính (sản phẩm, quyền lợi, thủ tục, dịch vụ). Trả replyText chuẩn script.',
+  parameters: {
+    type: 'object',
+    properties: {
+      intentId: {
+        type: 'string',
+        description: `Intent ID của câu hỏi. Giá trị hợp lệ: ${FAQ_INTENT_IDS.join(', ')}`,
+      },
+    },
+    required: ['intentId'],
+    additionalProperties: false,
+  },
+  execute: async (args: any) => {
+    const id = String(args?.intentId ?? '').trim();
+    const entry = faqEntries.find((e) => e.intentId === id);
+
+    if (!entry) {
+      return {
+        ok: false,
+        fallbackText:
+          'Dạ câu hỏi của {gender} em chưa có thông tin chi tiết, nhưng em sẽ ghi nhận và phản hồi lại cho {gender} sau ạ.',
+        availableIntents: FAQ_INTENT_IDS,
+      };
+    }
+
+    const state = getLeadgenMultiAgentState();
+    const gender = normalizeGenderValue(state.slots.leadGender);
+    const replyText = entry.replyText.replace(/\{gender\}/g, gender);
+
+    return {
+      ok: true,
+      intentId: entry.intentId,
+      category: entry.category,
+      question: entry.question,
+      replyText,
     };
   },
 });
