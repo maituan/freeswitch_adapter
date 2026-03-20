@@ -21,6 +21,13 @@ type CalcTndsFeeArgs = {
   discountPercent?: number;
 };
 
+function resolveSessionId(runContext: any): string {
+  const cd = runContext?.context?.customData ?? {};
+  return String(
+    cd.session_id ?? runContext?.context?.callId ?? '__default__'
+  ).trim() || '__default__';
+}
+
 function nonEmpty(value?: string): string | undefined {
   const trimmed = String(value ?? '').trim();
   return trimmed || undefined;
@@ -162,8 +169,12 @@ function buildPricingContext(state: LeadgenMultiAgentSessionState, args?: CalcTn
   };
 }
 
-function buildLeadgenScriptVars(state: LeadgenMultiAgentSessionState, args?: CalcTndsFeeArgs) {
-  const runtime = getLeadgenMultiAgentRuntimeContext();
+function buildLeadgenScriptVars(
+  sessionId: string,
+  state: LeadgenMultiAgentSessionState,
+  args?: CalcTndsFeeArgs,
+) {
+  const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
   const resolved = resolvePricingInputs(state, args);
   const purpose = derivePurposeLabel(resolved.isBusiness, state.slots.purpose);
   const vehicleDescription =
@@ -184,6 +195,8 @@ function buildLeadgenScriptVars(state: LeadgenMultiAgentSessionState, args?: Cal
     num_seats: resolved.seats ? String(resolved.seats) : '',
     purpose,
     expiry_date: formatExpiryDateForSpeech(state.slots.expiryDate),
+    brand: nonEmpty(state.slots.brand) ?? '',
+    color: nonEmpty(state.slots.color) ?? '',
     list_price: formatRoundedPriceForSpeech(state.pricing.listPrice),
     discount_price: formatRoundedPriceForSpeech(state.pricing.discountPrice),
     savings: formatRoundedPriceForSpeech(state.pricing.savings),
@@ -200,8 +213,12 @@ function buildLeadgenScriptVars(state: LeadgenMultiAgentSessionState, args?: Cal
   };
 }
 
-function buildQuoteReplyText(state: LeadgenMultiAgentSessionState, args?: CalcTndsFeeArgs) {
-  const vars = buildLeadgenScriptVars(state, args);
+function buildQuoteReplyText(
+  sessionId: string,
+  state: LeadgenMultiAgentSessionState,
+  args?: CalcTndsFeeArgs,
+) {
+  const vars = buildLeadgenScriptVars(sessionId, state, args);
 
   return `Dạ vâng. Với ${vars.vehicle_description} của mình, giá niêm yết là ${vars.list_price} một năm. Hôm nay bên em có ưu đãi, ${vars.gender} chỉ cần ${vars.discount_price} một năm, tiết kiệm ${vars.savings} ạ. Ngoài ra ${vars.gender} còn được tặng ${vars.gifts} ạ. Em sẽ gửi bản điện tử qua Zalo, bản giấy gửi về tận nhà. ${vars.gender} kiểm tra rồi mới thanh toán nhé.`;
 }
@@ -215,14 +232,15 @@ export const getLeadgenContextTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async () => {
-    const state = getLeadgenMultiAgentState();
-    const runtime = getLeadgenMultiAgentRuntimeContext();
+  execute: async (_args: unknown, runContext: any) => {
+    const sessionId = resolveSessionId(runContext);
+    const state = getLeadgenMultiAgentState(sessionId);
+    const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
     return {
       ok: true,
       state,
       runtime,
-      scriptVars: buildLeadgenScriptVars(state),
+      scriptVars: buildLeadgenScriptVars(sessionId, state),
       pricingContext: buildPricingContext(state),
     };
   },
@@ -267,7 +285,8 @@ export const updateLeadgenStateTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async (args: any) => {
+  execute: async (args: any, runContext: any) => {
+    const sessionId = resolveSessionId(runContext);
     const patch: any = {};
     if (args?.currentBuc) patch.currentBuc = args.currentBuc;
     if (args?.slots) patch.slots = args.slots;
@@ -277,11 +296,11 @@ export const updateLeadgenStateTool = tool({
         endedAt: new Date().toISOString(),
       };
     }
-    const nextState = patchLeadgenMultiAgentState(patch);
+    const nextState = patchLeadgenMultiAgentState(sessionId, patch);
     return {
       ok: true,
       state: nextState,
-      scriptVars: buildLeadgenScriptVars(nextState),
+      scriptVars: buildLeadgenScriptVars(sessionId, nextState),
       pricingContext: buildPricingContext(nextState),
     };
   },
@@ -305,8 +324,9 @@ export const calcTndsFeeTool = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async (args: any) => {
-    const state = getLeadgenMultiAgentState();
+  execute: async (args: any, runContext: any) => {
+    const sessionId = resolveSessionId(runContext);
+    const state = getLeadgenMultiAgentState(sessionId);
     const resolved = resolvePricingInputs(state, args as CalcTndsFeeArgs);
     const missing = getMissingPricingSlots(resolved);
 
@@ -356,8 +376,8 @@ export const calcTndsFeeTool = tool({
       typeof listPrice === 'number' && typeof discountPrice === 'number'
         ? listPrice - discountPrice
         : undefined;
-    const nextState = patchLeadgenMultiAgentState({
-      slots: {
+      const nextState = patchLeadgenMultiAgentState(sessionId, {
+          slots: {
         vehicleType: resolved.vehicleType,
         ...(typeof resolved.seats === 'number' ? { numSeats: resolved.seats } : {}),
         ...(typeof resolved.isBusiness === 'boolean'
@@ -384,9 +404,9 @@ export const calcTndsFeeTool = tool({
       ...result,
       usedArgs: resolved,
       pricingState: nextState.pricing,
-      scriptVars: buildLeadgenScriptVars(nextState, args as CalcTndsFeeArgs),
+      scriptVars: buildLeadgenScriptVars(sessionId, nextState, args as CalcTndsFeeArgs),
       pricingContext: buildPricingContext(nextState, args as CalcTndsFeeArgs),
-      replyText: buildQuoteReplyText(nextState, args as CalcTndsFeeArgs),
+      replyText: buildQuoteReplyText(sessionId, nextState, args as CalcTndsFeeArgs),
     };
   },
 });
@@ -408,7 +428,7 @@ export const lookupFaqTool = tool({
     required: ['intentId'],
     additionalProperties: false,
   },
-  execute: async (args: any) => {
+  execute: async (args: any, runContext: any) => {
     const id = String(args?.intentId ?? '').trim();
     const entry = faqEntries.find((e) => e.intentId === id);
 
@@ -420,8 +440,8 @@ export const lookupFaqTool = tool({
         availableIntents: FAQ_INTENT_IDS,
       };
     }
-
-    const state = getLeadgenMultiAgentState();
+    const sessionId = resolveSessionId(runContext);
+    const state = getLeadgenMultiAgentState(sessionId);
     const gender = normalizeGenderValue(state.slots.leadGender);
     const replyText = entry.replyText.replace(/\{gender\}/g, gender);
 
