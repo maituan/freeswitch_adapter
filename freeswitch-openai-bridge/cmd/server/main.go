@@ -293,6 +293,12 @@ func handleAnswer(ev *eventsocket.Event) {
 			return
 		}
 	}
+	// Tell the relay the real SIP-leg UUID (used for recording filenames on FreeSWITCH).
+	// The relay was pre-warmed with the loopback UUID from originate; this update lets
+	// the Kafka payload carry the correct recording identifier.
+	if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: uuid}); err != nil {
+		log.Printf("[Call] relay set_sip_uuid failed uuid=%s: %v", uuid, err)
+	}
 	// Signal the relay that the call was answered — triggers response.create
 	if err := relayClient.SendControl(relay.ControlMsg{Type: "go"}); err != nil {
 		log.Printf("[Call] relay go signal failed uuid=%s: %v", uuid, err)

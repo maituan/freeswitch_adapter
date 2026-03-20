@@ -68,6 +68,7 @@ export class CallSession {
   private startTime = new Date()
   private endTime: Date | null = null
   private closed = false
+  private sipUuid = ''
   private trace: any = null
   private llmGenStartTime: Date | null = null
   private sendMessageTime: Date | null = null
@@ -477,6 +478,10 @@ export class CallSession {
       } else {
         try {
           const msg = JSON.parse((data as Buffer).toString())
+          if (msg.type === 'set_sip_uuid') {
+            this.sipUuid = msg.message ?? ''
+            this.log(`set_sip_uuid=${this.sipUuid}`)
+          }
           if (msg.type === 'go') {
             // Call has been answered — trigger the bot's opening message
             this.log('received go → response.create')
@@ -701,6 +706,7 @@ export class CallSession {
 
     const payload: CallHistoryPayload = {
       call_id: this.opts.callId || '',
+      ...(this.sipUuid ? { recording_uuid: this.sipUuid } : {}),
       scenario: this.opts.scenario,
       phone: this.opts.phone,
       start_time: this.startTime.toISOString().replace(/\.\d{3}Z$/, 'Z'),

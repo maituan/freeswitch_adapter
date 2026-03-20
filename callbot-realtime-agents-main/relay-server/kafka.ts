@@ -14,6 +14,7 @@ export interface CallHistoryMessage {
 
 export interface CallHistoryPayload {
   call_id: string
+  recording_uuid?: string
   scenario: string
   phone: string
   start_time: string
