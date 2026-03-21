@@ -293,11 +293,14 @@ func handleAnswer(ev *eventsocket.Event) {
 			return
 		}
 	}
-	// Tell the relay the real SIP-leg UUID (used for recording filenames on FreeSWITCH).
-	// The relay was pre-warmed with the loopback UUID from originate; this update lets
-	// the Kafka payload carry the correct recording identifier.
-	if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: uuid}); err != nil {
-		log.Printf("[Call] relay set_sip_uuid failed uuid=%s: %v", uuid, err)
+	// Send the recording UUID to the relay for Kafka.
+	// FreeSWITCH records on loopback-b, whose UUID = Other-Leg-Unique-ID of the SIP leg.
+	recordingUUID := ev.Get("Other-Leg-Unique-ID")
+	log.Printf("[Call] sip_uuid=%s recording_uuid=%s (loopback-b)", uuid, recordingUUID)
+	if recordingUUID != "" {
+		if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: recordingUUID}); err != nil {
+			log.Printf("[Call] relay set_sip_uuid failed: %v", err)
+		}
 	}
 	// Signal the relay that the call was answered — triggers response.create
 	if err := relayClient.SendControl(relay.ControlMsg{Type: "go"}); err != nil {
@@ -417,7 +420,6 @@ func handleAnswer(ev *eventsocket.Event) {
 				if sess.GetStatus() != "active" {
 					return
 				}
-				log.Printf("[Relay] control type=%s event=%s action=%s uuid=%s", msg.Type, msg.EventName, msg.Action, uuid)
 				switch msg.Type {
 				case "event":
 					if msg.EventName == "tts_done" {
