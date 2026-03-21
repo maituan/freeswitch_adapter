@@ -43,6 +43,7 @@ type preCallData struct {
 	Scenario    string
 	VoiceID     string
 	Phone       string
+	CallUUID    string // loopback-a UUID from originate
 	CustomData  map[string]interface{}
 	MediaParams *relay.MediaParams
 	RelayReady  chan *relay.Client // buffered(1); closed on failure; nil = not pre-warmed
@@ -197,19 +198,15 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	// Load pre-call data: try UUID, origination_uuid, Other-Leg, then phone fallback
 	var pd preCallData
-	var originateUUID string // loopback-a UUID (key in pendingCalls)
 	if v, ok := pendingCalls.LoadAndDelete(uuid); ok {
 		pd = v.(preCallData)
-		originateUUID = uuid
 	} else if origUUID := ev.Get("variable_origination_uuid"); origUUID != "" {
 		if v, ok := pendingCalls.LoadAndDelete(origUUID); ok {
 			pd = v.(preCallData)
-			originateUUID = origUUID
 		}
 	} else if otherLeg != "" {
 		if v, ok := pendingCalls.LoadAndDelete(otherLeg); ok {
 			pd = v.(preCallData)
-			originateUUID = otherLeg
 		}
 	}
 	if pd.Scenario == "" {
@@ -309,11 +306,22 @@ func handleAnswer(ev *eventsocket.Event) {
 		}
 	}
 	// Send the recording UUID (loopback-b) to the relay for Kafka.
-	// FreeSWITCH records on loopback-b; its UUID is mapped via loopbackBUUIDs[loopback-a].
+	// FreeSWITCH records on loopback-b; try loopbackBUUIDs map first, then ESL API query.
 	var recordingUUID string
+	originateUUID := pd.CallUUID
 	if originateUUID != "" {
 		if v, ok := loopbackBUUIDs.LoadAndDelete(originateUUID); ok {
 			recordingUUID = v.(string)
+		}
+		if recordingUUID == "" {
+			// Fallback: query FreeSWITCH for loopback-b UUID via ESL API
+			resp, err := esl.SendAPI(fmt.Sprintf("uuid_getvar %s other_loopback_leg_uuid", originateUUID))
+			if err == nil {
+				r := strings.TrimSpace(resp)
+				if r != "" && !strings.HasPrefix(r, "-ERR") {
+					recordingUUID = r
+				}
+			}
 		}
 	}
 	log.Printf("[Call] sip_uuid=%s originate_uuid=%s recording_uuid=%s", uuid, originateUUID, recordingUUID)
@@ -656,6 +664,7 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 		Scenario:    scenario,
 		VoiceID:     req.VoiceID,
 		Phone:       phone,
+		CallUUID:    callUUID,
 		CustomData:  cd,
 		MediaParams: req.MediaParams,
 		RelayReady:  prewarmRelay(callUUID, scenario, phone, req.VoiceID, cd, req.MediaParams),
@@ -689,6 +698,7 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 	pd := preCallData{
 		Scenario:   scenario,
 		Phone:      phone,
+		CallUUID:   callUUID,
 		CustomData: customData,
 		RelayReady: prewarmRelay(callUUID, scenario, phone, "", customData, nil),
 	}
