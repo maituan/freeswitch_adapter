@@ -35,6 +35,7 @@ var (
 	pendingCalls     sync.Map // uuid -> preCallData
 	pendingByPhone   sync.Map // phone -> preCallData (fallback lookup for loopback calls)
 	bridgeUUIDs      sync.Map // tracks all UUIDs belonging to bridge-originated calls
+	loopbackBUUIDs   sync.Map // loopback-a UUID -> loopback-b UUID (recording file name)
 	campaigns        *campaign.Manager
 )
 
@@ -141,6 +142,16 @@ func handleAnswer(ev *eventsocket.Event) {
 	// Loopback legs: record UUID for chain tracking, then skip
 	if strings.HasPrefix(channelName, "loopback/") {
 		bridgeUUIDs.Store(uuid, true)
+		// Track loopback-b UUID for recording file lookup
+		if strings.HasSuffix(channelName, "-b") {
+			otherLeg := ev.Get("Other-Leg-Unique-ID")
+			if otherLeg != "" {
+				loopbackBUUIDs.Store(otherLeg, uuid) // loopback-a → loopback-b
+				log.Printf("[Call] ANSWER loopback-b uuid=%s other_leg(a)=%s", uuid, otherLeg)
+			} else {
+				log.Printf("[Call] ANSWER loopback-b uuid=%s (Other-Leg empty)", uuid)
+			}
+		}
 		log.Printf("[Call] ANSWER loopback tracked uuid=%s channel=%s", uuid, channelName)
 		return
 	}
@@ -186,15 +197,19 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	// Load pre-call data: try UUID, origination_uuid, Other-Leg, then phone fallback
 	var pd preCallData
+	var originateUUID string // loopback-a UUID (key in pendingCalls)
 	if v, ok := pendingCalls.LoadAndDelete(uuid); ok {
 		pd = v.(preCallData)
+		originateUUID = uuid
 	} else if origUUID := ev.Get("variable_origination_uuid"); origUUID != "" {
 		if v, ok := pendingCalls.LoadAndDelete(origUUID); ok {
 			pd = v.(preCallData)
+			originateUUID = origUUID
 		}
 	} else if otherLeg != "" {
 		if v, ok := pendingCalls.LoadAndDelete(otherLeg); ok {
 			pd = v.(preCallData)
+			originateUUID = otherLeg
 		}
 	}
 	if pd.Scenario == "" {
@@ -293,10 +308,15 @@ func handleAnswer(ev *eventsocket.Event) {
 			return
 		}
 	}
-	// Send the recording UUID to the relay for Kafka.
-	// FreeSWITCH records on loopback-b, whose UUID = Other-Leg-Unique-ID of the SIP leg.
-	recordingUUID := ev.Get("Other-Leg-Unique-ID")
-	log.Printf("[Call] sip_uuid=%s recording_uuid=%s (loopback-b)", uuid, recordingUUID)
+	// Send the recording UUID (loopback-b) to the relay for Kafka.
+	// FreeSWITCH records on loopback-b; its UUID is mapped via loopbackBUUIDs[loopback-a].
+	var recordingUUID string
+	if originateUUID != "" {
+		if v, ok := loopbackBUUIDs.LoadAndDelete(originateUUID); ok {
+			recordingUUID = v.(string)
+		}
+	}
+	log.Printf("[Call] sip_uuid=%s originate_uuid=%s recording_uuid=%s", uuid, originateUUID, recordingUUID)
 	if recordingUUID != "" {
 		if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: recordingUUID}); err != nil {
 			log.Printf("[Call] relay set_sip_uuid failed: %v", err)
