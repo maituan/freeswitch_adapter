@@ -68,6 +68,7 @@ export class CallSession {
   private startTime = new Date()
   private endTime: Date | null = null
   private closed = false
+  private firstPlaybackStopped = false
   private sipUuid = ''
   private trace: any = null
   private llmGenStartTime: Date | null = null
@@ -438,7 +439,10 @@ export class CallSession {
     await this.asrClient.connect(asrParams)
     this.asrClient.onTranscript((transcript, isFinal) => {
       this.sendEvent('client', 'asr_transcript', { transcript, isFinal })
+      // Discard until bot has spoken AND first TTS playback confirmed done.
+      // After first playback_stop, ASR stream is restarted to flush pre-TTS audio.
       if (!this.botSpokenOnce) return
+      if (!this.firstPlaybackStopped) return
       if (isFinal && transcript.trim()) {
         if (this.isProcessing || this.isPlayingAudio) {
           this.log(`ASR suppressed (processing=${this.isProcessing} playing=${this.isPlayingAudio}): "${transcript.trim().substring(0, 80)}"`)
@@ -501,6 +505,15 @@ export class CallSession {
               this.playbackMuteTimer = null
             }
             this.isPlayingAudio = false
+            // After first TTS playback confirmed done: restart ASR to flush any
+            // audio that was spoken before the bot's opening line (e.g. "alo").
+            if (!this.firstPlaybackStopped && this.botSpokenOnce) {
+              this.firstPlaybackStopped = true
+              this.log('first playback_stop → restarting ASR to flush pre-TTS audio')
+              this.asrClient?.restartStream(asrParams).catch((e) =>
+                this.logError('ASR restart failed:', e)
+              )
+            }
             this.sendEvent('client', 'asr_unmuted', {})
             // If we were waiting for the last TTS to finish before hanging up, do it now.
             if (this.pendingEndcall) {

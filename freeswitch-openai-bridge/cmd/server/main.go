@@ -249,9 +249,6 @@ func handleAnswer(ev *eventsocket.Event) {
 		return
 	}
 
-	// Stereo recording on SIP leg (captures both user + bot TTS)
-	stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
-
 	// cleanupOnce ensures session cleanup runs exactly once,
 	// whether triggered by CHANNEL_HANGUP, AudioIn EOF, or FIFO broken pipe.
 	var cleanupOnce sync.Once
@@ -263,7 +260,6 @@ func handleAnswer(ev *eventsocket.Event) {
 				sess.RelayConn.Close()
 			}
 			esl.StopRecording(uuid, recordPath)
-			esl.StopRecording(uuid, stereoRecordPath)
 			os.Remove(recordPath)
 			os.Remove(ttsPath)
 			for _, c := range campaigns.List() {
@@ -533,17 +529,6 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	if err := esl.StartRecording(uuid, recordPath); err != nil {
 		log.Printf("[Call] StartRecording: %v", err)
-	}
-
-	// Start stereo recording on SIP leg: captures both user voice (read) and
-	// bot TTS (write) in a single file. The mono FIFO recording above only
-	// captures user voice for ASR; this stereo file is the full call recording.
-	if err := os.MkdirAll("/var/lib/freeswitch/recordings/voiceai", 0755); err != nil {
-		log.Printf("[Call] mkdir stereo recordings: %v", err)
-	} else if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
-		log.Printf("[Call] StartStereoRecording: %v", err)
-	} else {
-		log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
 	}
 
 	// Silence timeout: if no user/bot activity for SILENCE_TIMEOUT seconds,
