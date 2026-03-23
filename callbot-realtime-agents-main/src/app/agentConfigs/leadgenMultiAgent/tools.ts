@@ -181,7 +181,7 @@ function buildLeadgenScriptVars(
     resolved.vehicleType === 'truck'
       ? `xe tải ${typeof resolved.weightTons === 'number' ? `${resolved.weightTons} tấn` : 'của mình'}`
       : resolved.vehicleType === 'pickup'
-        ? `xe pickup ${resolved.seats ? `${resolved.seats} chỗ ` : ''}${purpose}`
+        ? `xe bán tải ${resolved.seats ? `${resolved.seats} chỗ ` : ''}${purpose}`
         : resolved.seats
           ? `xe ${resolved.seats} chỗ ${purpose}`
           : `xe ${purpose}`;
@@ -259,7 +259,7 @@ export const updateLeadgenStateTool = tool({
         properties: {
           vehicleType: { type: 'string', enum: ['car', 'pickup', 'truck'] },
           numSeats: { type: 'number', description: 'Số chỗ ngồi' },
-          isBusiness: { type: 'boolean', description: 'Có kinh doanh vận tải không' },
+          isBusiness: { type: 'boolean', description: 'Có kinh doanh không' },
           weightTons: { type: 'number', description: 'Tải trọng xe tải (tấn)' },
           expiryDate: { type: 'string', description: 'Ngày/tháng hết hạn bảo hiểm' },
           brand: { type: 'string', description: 'Hãng xe' },
@@ -317,7 +317,7 @@ export const calcTndsFeeTool = tool({
       vehicleType: { type: 'string', enum: ['car', 'pickup', 'truck'] },
       seats: { type: 'number', description: 'Số chỗ ngồi của xe' },
       numSeats: { type: 'number', description: 'Alias của seats để tương thích state hiện tại' },
-      isBusiness: { type: 'boolean', description: 'Xe có kinh doanh vận tải không' },
+      isBusiness: { type: 'boolean', description: 'Xe có kinh doanh không' },
       weightTons: { type: 'number', description: 'Tải trọng xe tải (tấn)' },
       discountPercent: { type: 'number', description: 'Phần trăm giảm giá (mặc định 10)' },
     },
