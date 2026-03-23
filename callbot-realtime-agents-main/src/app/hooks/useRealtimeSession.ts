@@ -209,7 +209,12 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
   const pushToTalkStop = useCallback(() => {
     if (!sessionRef.current) return;
     sessionRef.current.transport.sendEvent({ type: 'input_audio_buffer.commit' } as any);
-    sessionRef.current.transport.sendEvent({ type: 'response.create' } as any);
+    sessionRef.current.transport.sendEvent({
+      type: 'response.create',
+      response: {
+        output_modalities: ['text'],
+      },
+    } as any);
   }, []);
 
   return {

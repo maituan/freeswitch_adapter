@@ -733,7 +733,15 @@ function App() {
         content: [{ type: 'input_text', text }],
       },
     });
-    sendClientEvent({ type: 'response.create' }, '(simulated user text message)');
+    sendClientEvent(
+      {
+        type: 'response.create',
+        response: {
+          modalities: ['text'],
+        },
+      },
+      '(simulated user text message)',
+    );
   };
 
   const updateSession = (shouldTriggerResponse: boolean = false) => {
@@ -753,6 +761,8 @@ function App() {
     sendEvent({
       type: 'session.update',
       session: {
+        modalities: ['text'],
+        output_modalities: ['text'],
         turn_detection: turnDetection,
       },
     });
@@ -801,7 +811,15 @@ function App() {
 
     setIsPTTUserSpeaking(false);
     sendClientEvent({ type: 'input_audio_buffer.commit' }, 'commit PTT');
-    sendClientEvent({ type: 'response.create' }, 'trigger response PTT');
+    sendClientEvent(
+      {
+        type: 'response.create',
+        response: {
+          output_modalities: ['text'],
+        },
+      },
+      'trigger response PTT',
+    );
   };
 
   const onToggleConnection = () => {
