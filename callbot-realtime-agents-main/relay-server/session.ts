@@ -227,18 +227,6 @@ export class CallSession {
       const agentName = toAgent?.name ?? 'unknown'
       this.log(`handoff → ${agentName}`)
       this.sendEvent('server', 'agent_handoff', { agentName })
-      // Force text-only modality after handoff. The SDK may reset modalities
-      // to ['text','audio'] when switching agents, causing the model to generate
-      // audio output (slow). Re-send session.update to keep text-only.
-      this.realtimeSession?.transport.sendEvent({
-        type: 'session.update',
-        session: {
-          modalities: ['text'],
-          turn_detection: null,
-          input_audio_transcription: null,
-        },
-      } as any)
-      this.log(`handoff → forced modalities=['text']`)
     })
 
     this.realtimeSession.on('transport_event', (event: any) => {
@@ -440,6 +428,27 @@ export class CallSession {
     })
 
     await this.realtimeSession.connect({ apiKey: process.env.OPENAI_API_KEY! })
+
+    // Patch transport to force modalities=['text'] on every outgoing event.
+    // After agent handoff the SDK may reset modalities to ['text','audio'],
+    // causing the model to generate audio (slow + unnecessary). This intercept
+    // ensures ALL session.update and response.create stay text-only.
+    const transport = this.realtimeSession.transport as any
+    if (transport && typeof transport.sendEvent === 'function') {
+      const origSend = transport.sendEvent.bind(transport)
+      transport.sendEvent = (event: any) => {
+        if (event?.type === 'session.update' && event?.session) {
+          event.session.modalities = ['text']
+          event.session.turn_detection = null
+          event.session.input_audio_transcription = null
+        }
+        if (event?.type === 'response.create' && event?.response) {
+          event.response.modalities = ['text']
+        }
+        return origSend(event)
+      }
+      this.log('transport patched: force modalities=["text"]')
+    }
 
     // 6. Connect ASR client; on transcript → forward event + feed isFinal to agent
     const asrParams = {
