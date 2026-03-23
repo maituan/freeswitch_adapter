@@ -227,6 +227,18 @@ export class CallSession {
       const agentName = toAgent?.name ?? 'unknown'
       this.log(`handoff → ${agentName}`)
       this.sendEvent('server', 'agent_handoff', { agentName })
+      // Force text-only modality after handoff. The SDK may reset modalities
+      // to ['text','audio'] when switching agents, causing the model to generate
+      // audio output (slow). Re-send session.update to keep text-only.
+      this.realtimeSession?.transport.sendEvent({
+        type: 'session.update',
+        session: {
+          modalities: ['text'],
+          turn_detection: null,
+          input_audio_transcription: null,
+        },
+      } as any)
+      this.log(`handoff → forced modalities=['text']`)
     })
 
     this.realtimeSession.on('transport_event', (event: any) => {
