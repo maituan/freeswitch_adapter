@@ -647,6 +647,7 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 
 	var req callRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[API] invalid request body: %v", err)
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
