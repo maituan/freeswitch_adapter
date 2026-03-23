@@ -352,19 +352,12 @@ func handleAnswer(ev *eventsocket.Event) {
 		var fifoOpen bool
 		var chunkIdx int
 
-		// Use loopback-b for playback so record_session captures bot voice.
-		// Falls back to SIP UUID if loopback-b is not available.
-		playUUID := sess.PlaybackUUID
-		if playUUID == "" {
-			playUUID = uuid
-		}
-
 		openFIFO := func() error {
 			if fifoOpen {
 				return nil
 			}
-			log.Printf("[AudioOut] Starting new utterance uuid=%s playback_on=%s", uuid, playUUID)
-			if err := esl.PlayAudio(playUUID, ttsPath); err != nil {
+			log.Printf("[AudioOut] Starting new utterance uuid=%s", uuid)
+			if err := esl.PlayAudio(uuid, ttsPath); err != nil {
 				return fmt.Errorf("PlayAudio: %w", err)
 			}
 			var err error
