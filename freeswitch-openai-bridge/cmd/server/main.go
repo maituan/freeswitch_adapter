@@ -326,6 +326,9 @@ func handleAnswer(ev *eventsocket.Event) {
 	}
 	log.Printf("[Call] sip_uuid=%s originate_uuid=%s recording_uuid=%s", uuid, originateUUID, recordingUUID)
 	if recordingUUID != "" {
+		// Use loopback-b for playback so that record_session on loopback-b captures bot voice.
+		// Broadcasting on sofia causes loopback-b to hear hold music instead of TTS.
+		sess.PlaybackUUID = recordingUUID
 		if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: recordingUUID}); err != nil {
 			log.Printf("[Call] relay set_sip_uuid failed: %v", err)
 		}
@@ -349,12 +352,19 @@ func handleAnswer(ev *eventsocket.Event) {
 		var fifoOpen bool
 		var chunkIdx int
 
+		// Use loopback-b for playback so record_session captures bot voice.
+		// Falls back to SIP UUID if loopback-b is not available.
+		playUUID := sess.PlaybackUUID
+		if playUUID == "" {
+			playUUID = uuid
+		}
+
 		openFIFO := func() error {
 			if fifoOpen {
 				return nil
 			}
-			log.Printf("[AudioOut] Starting new utterance uuid=%s", uuid)
-			if err := esl.PlayAudio(uuid, ttsPath); err != nil {
+			log.Printf("[AudioOut] Starting new utterance uuid=%s playback_on=%s", uuid, playUUID)
+			if err := esl.PlayAudio(playUUID, ttsPath); err != nil {
 				return fmt.Errorf("PlayAudio: %w", err)
 			}
 			var err error
@@ -450,9 +460,16 @@ func handleAnswer(ev *eventsocket.Event) {
 				}
 				switch msg.Type {
 				case "event":
+					if msg.EventName == "tts_start" {
+						sess.SetBotSpeaking(true)
+					}
 					if msg.EventName == "tts_done" {
 						log.Printf("[Relay] tts_done, will flush after trailing silence uuid=%s", uuid)
 						pendingFlush = true
+					}
+					if msg.EventName == "send_message" {
+						// User spoke — refresh activity
+						sess.TouchActivity()
 					}
 				case "command":
 					switch msg.Action {
@@ -520,6 +537,35 @@ func handleAnswer(ev *eventsocket.Event) {
 	if err := esl.StartRecording(uuid, recordPath); err != nil {
 		log.Printf("[Call] StartRecording: %v", err)
 	}
+
+	// Silence timeout: if no user/bot activity for SILENCE_TIMEOUT seconds,
+	// force-end the call. Handles cases where user hangs up but SIP provider
+	// doesn't send BYE (FreeSWITCH only detects via RTP timeout = 300s).
+	silenceTimeout := 30 // seconds
+	if v := os.Getenv("SILENCE_TIMEOUT"); v != "" {
+		fmt.Sscanf(v, "%d", &silenceTimeout)
+	}
+	if silenceTimeout > 0 {
+		go func() {
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				st := sess.GetStatus()
+				if st != "active" {
+					return
+				}
+				if sess.IsBotSpeaking() {
+					continue
+				}
+				elapsed := time.Since(sess.GetLastActivity())
+				if elapsed >= time.Duration(silenceTimeout)*time.Second {
+					log.Printf("[VAD] silence timeout (%ds) uuid=%s, ending call", silenceTimeout, uuid)
+					esl.EndCall(uuid)
+					return
+				}
+			}
+		}()
+	}
 }
 
 func handleHangup(ev *eventsocket.Event) {
@@ -547,6 +593,8 @@ func handlePlaybackStop(ev *eventsocket.Event) {
 		return
 	}
 	log.Printf("[Call] PLAYBACK_STOP uuid=%s status=%s", uuid, sess.GetStatus())
+	sess.SetBotSpeaking(false)
+	sess.TouchActivity()
 	// Notify relay so it can unmute ASR / trigger its own endcall cleanup.
 	sess.SendToRelay(relay.ControlMsg{
 		Type:      "event",

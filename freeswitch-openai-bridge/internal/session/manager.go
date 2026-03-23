@@ -8,19 +8,50 @@ import (
 )
 
 type CallSession struct {
-	UUID        string
-	Phone       string
-	Status      string
-	StartTime   time.Time
-	RelayConn   *relay.Client
-	CleanupFunc func(string) // callable cleanup, argument is reason string
-	mu          sync.RWMutex
+	UUID         string
+	Phone        string
+	Status       string
+	PlaybackUUID string    // loopback-b UUID — use for uuid_broadcast so recording captures bot voice
+	StartTime    time.Time
+	LastActivity time.Time // last user speech or bot activity
+	BotSpeaking  bool     // true while TTS is being played
+	RelayConn    *relay.Client
+	CleanupFunc  func(string) // callable cleanup, argument is reason string
+	mu           sync.RWMutex
 }
 
 func (s *CallSession) UpdateStatus(status string) {
 	s.mu.Lock()
 	s.Status = status
 	s.mu.Unlock()
+}
+
+// TouchActivity marks the current time as last user/bot activity.
+func (s *CallSession) TouchActivity() {
+	s.mu.Lock()
+	s.LastActivity = time.Now()
+	s.mu.Unlock()
+}
+
+func (s *CallSession) GetLastActivity() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.LastActivity
+}
+
+func (s *CallSession) SetBotSpeaking(v bool) {
+	s.mu.Lock()
+	s.BotSpeaking = v
+	if v {
+		s.LastActivity = time.Now()
+	}
+	s.mu.Unlock()
+}
+
+func (s *CallSession) IsBotSpeaking() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.BotSpeaking
 }
 
 func (s *CallSession) GetStatus() string {
@@ -41,11 +72,13 @@ func NewManager() *Manager {
 func (m *Manager) Create(uuid, phone string) *CallSession {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	now := time.Now()
 	s := &CallSession{
-		UUID:      uuid,
-		Phone:     phone,
-		Status:    "active",
-		StartTime: time.Now(),
+		UUID:         uuid,
+		Phone:        phone,
+		Status:       "active",
+		StartTime:    now,
+		LastActivity: now,
 	}
 	m.sessions[uuid] = s
 	return s
