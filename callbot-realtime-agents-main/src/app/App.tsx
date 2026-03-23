@@ -762,7 +762,6 @@ function App() {
       type: 'session.update',
       session: {
         modalities: ['text'],
-        output_modalities: ['text'],
         turn_detection: turnDetection,
       },
     });
@@ -815,7 +814,7 @@ function App() {
       {
         type: 'response.create',
         response: {
-          output_modalities: ['text'],
+          modalities: ['text'],
         },
       },
       'trigger response PTT',

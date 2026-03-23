@@ -212,7 +212,7 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
     sessionRef.current.transport.sendEvent({
       type: 'response.create',
       response: {
-        output_modalities: ['text'],
+        modalities: ['text'],
       },
     } as any);
   }, []);
