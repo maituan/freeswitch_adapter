@@ -490,7 +490,12 @@ export class CallSession {
             // Call has been answered — trigger the bot's opening message
             this.log('received go → response.create')
             this.isProcessing = true
-            this.realtimeSession?.transport.sendEvent({ type: 'response.create' } as any)
+            this.realtimeSession?.transport.sendEvent({
+              type: 'response.create',
+              response: {
+                modalities: ['text'],
+              },
+            } as any)
           }
           if (msg.type === 'interrupt') {
             this.realtimeSession?.interrupt()
