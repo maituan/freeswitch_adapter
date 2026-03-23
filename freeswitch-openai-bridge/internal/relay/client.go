@@ -22,10 +22,10 @@ type ControlMsg struct {
 }
 
 type MediaParams struct {
-	ASRSpeechTimeout  string `json:"asr_speech_timeout,omitempty"`
-	ASRSilenceTimeout string `json:"asr_silence_timeout,omitempty"`
-	ASRSpeechMax      string `json:"asr_speech_max,omitempty"`
-	TTSTempo          string `json:"tts_tempo,omitempty"`
+	ASRSpeechTimeout  interface{} `json:"asr_speech_timeout,omitempty"`
+	ASRSilenceTimeout interface{} `json:"asr_silence_timeout,omitempty"`
+	ASRSpeechMax      interface{} `json:"asr_speech_max,omitempty"`
+	TTSTempo          interface{} `json:"tts_tempo,omitempty"`
 }
 
 type ConnectParams struct {
