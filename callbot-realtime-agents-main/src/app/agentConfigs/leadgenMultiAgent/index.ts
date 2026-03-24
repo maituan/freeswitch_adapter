@@ -2,9 +2,14 @@ import { RealtimeAgent } from '@openai/agents/realtime';
 import { createGreetingAgent } from './agents/greetingAgent/greetingAgent';
 import { createMainSaleAgent } from './agents/mainSaleAgent/mainSaleAgent';
 
-export function buildLeadgenMultiAgents(): RealtimeAgent[] {
-  const mainSaleAgent = createMainSaleAgent();
-  const greetingAgent = createGreetingAgent(mainSaleAgent);
+export type PromptOverrides = {
+  greetingAgent?: string
+  mainSaleAgent?: string
+}
+
+export function buildLeadgenMultiAgents(prompts?: PromptOverrides): RealtimeAgent[] {
+  const mainSaleAgent = createMainSaleAgent(prompts?.mainSaleAgent);
+  const greetingAgent = createGreetingAgent(mainSaleAgent, prompts?.greetingAgent);
   // greetingAgent is first → used as initialAgent by relay session (agents[0])
   return [greetingAgent, mainSaleAgent];
 }

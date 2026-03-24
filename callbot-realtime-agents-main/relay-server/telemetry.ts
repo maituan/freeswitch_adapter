@@ -52,6 +52,24 @@ export function createCallTrace(callId: string, scenario: string, phone: string)
 }
 
 /**
+ * Fetch a text prompt from Langfuse by name and label.
+ * Returns the raw prompt string, or null if Langfuse is disabled / fetch fails.
+ * The prompt text is returned as-is — no variable compilation is performed
+ * because {variable} placeholders are interpreted by the LLM at runtime.
+ */
+export async function fetchPrompt(name: string, label: string = 'production'): Promise<string | null> {
+  const lf = getLangfuse()
+  if (!lf) return null
+  try {
+    const prompt = await lf.getPrompt(name, undefined, { label })
+    return prompt.prompt ?? null
+  } catch (err: any) {
+    console.error(`[langfuse] Failed to fetch prompt "${name}" (label=${label}):`, err?.message ?? err)
+    return null
+  }
+}
+
+/**
  * Flush all pending Langfuse events. Call this at the end of a session.
  */
 export async function flushTelemetry(): Promise<void> {

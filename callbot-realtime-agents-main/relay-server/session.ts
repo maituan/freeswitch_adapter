@@ -1,11 +1,12 @@
 import { WebSocket } from 'ws'
 import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
-import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext } from '../src/app/agentConfigs/leadgenMultiAgent'
+import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext, PromptOverrides } from '../src/app/agentConfigs/leadgenMultiAgent'
+import { getLeadgenMultiAgentState } from '../src/app/agentConfigs/leadgenMultiAgent/internal/sessionState'
 import { AsrClient } from './asrClient'
 import { streamTTSAudio, StreamingTTS } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
-import { createCallTrace, flushTelemetry } from './telemetry'
+import { createCallTrace, flushTelemetry, fetchPrompt } from './telemetry'
 
 // Set DEBUG_LOGS=true to enable verbose history/transport event logs
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true'
@@ -121,9 +122,25 @@ export class CallSession {
     this.startTime = new Date()
     this.trace = createCallTrace(this.opts.callId, this.opts.scenario, this.opts.phone)
 
+    // Fetch prompts from Langfuse (no-op when disabled or on error → fallback to hardcoded)
+    let promptOverrides: PromptOverrides | undefined
+    if (this.opts.scenario === 'leadgenMultiAgent') {
+      const [greetingPrompt, mainSalePrompt] = await Promise.all([
+        fetchPrompt('leadgen-greetingAgent'),
+        fetchPrompt('leadgen-mainSaleAgent'),
+      ])
+      if (greetingPrompt || mainSalePrompt) {
+        promptOverrides = {
+          greetingAgent: greetingPrompt ?? undefined,
+          mainSaleAgent: mainSalePrompt ?? undefined,
+        }
+        this.log(`Loaded prompts from Langfuse: greeting=${!!greetingPrompt} mainSale=${!!mainSalePrompt}`)
+      }
+    }
+
     // Always build fresh agents per session to avoid SDK internal state reuse across calls
     let agents = this.opts.scenario === 'leadgenMultiAgent'
-      ? buildLeadgenMultiAgents()
+      ? buildLeadgenMultiAgents(promptOverrides)
       : allAgentSets[this.opts.scenario]
     if (!agents?.length) {
       this.ws.send(JSON.stringify({ type: 'error', message: `Unknown scenario: ${this.opts.scenario}` }))
@@ -741,7 +758,23 @@ export class CallSession {
     const callId = this.opts.callId || this.opts.phone || cd.leadId || ''
     if (!callId || !this.history.length) return
 
-    const report = (this.realtimeSession as any)?.context?.context?._report ?? undefined
+    // Get outcome from leadgenMultiAgent sessionState (in-memory store)
+    let report: any = undefined
+    if (this.opts.scenario === 'leadgenMultiAgent') {
+      try {
+        const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
+        const state = getLeadgenMultiAgentState(sessionId)
+        if (state?.outcome && Object.keys(state.outcome).length > 0) {
+          report = state.outcome
+        }
+      } catch (e) {
+        this.logError('Failed to get leadgen outcome:', e)
+      }
+    }
+    // Fallback to legacy _report from realtimeSession context
+    if (!report) {
+      report = (this.realtimeSession as any)?.context?.context?._report ?? undefined
+    }
 
     const payload: CallHistoryPayload = {
       call_id: this.opts.callId || '',
