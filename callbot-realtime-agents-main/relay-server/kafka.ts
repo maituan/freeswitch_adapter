@@ -70,7 +70,7 @@ export async function sendCallHistory(key: string, payload: CallHistoryPayload):
         },
       ],
     })
-    console.log(`${ts()} [Kafka] Call history sent topic=${topic} key=${key}`)
+    console.log(`${ts()} [Kafka] Call history sent topic=${topic} key=${key} payload=${JSON.stringify(payload)}`)
   } catch (err) {
     console.error(`${ts()} [Kafka] Failed to send call history:`, err)
   }
