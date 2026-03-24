@@ -274,7 +274,18 @@ export const updateLeadgenStateTool = tool({
         type: 'object',
         description: 'Kết quả cuộc gọi (dùng khi kết thúc hoặc hẹn gọi lại)',
         properties: {
-          report: { type: 'string', description: 'Tóm tắt kết quả (VD: Chốt thành công, Bận, Sai số)' },
+          report: {
+            type: 'array',
+            description: 'Danh sách nhãn kết quả cuộc gọi (có thể gắn nhiều nhãn)',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'number', description: 'ID nhãn: 39=Khách hàng tiềm năng, 35=Đồng ý/quan tâm, 33=Đồng ý kết bạn Zalo, 41=KH bán xe, 38=Khách chửi bậy/gay gắt, 37=Không có nhu cầu, 36=Đã mua, 34=Hẹn gọi lại' },
+                detail: { type: 'string', description: 'Tên nhãn kết quả' }
+              },
+              required: ['id', 'detail']
+            }
+          },
           issueType: { type: 'string' },
           level: { type: 'number' },
           callOutcome: { type: 'string', enum: ['Success', 'Rejection', 'Callback', 'NoAnswer'] },
