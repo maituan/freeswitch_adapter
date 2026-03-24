@@ -766,7 +766,7 @@ export class CallSession {
         const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
         const state = getLeadgenMultiAgentState(sessionId)
         if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
-          const endedAt = state.outcome.endedAt ?? new Date().toISOString()
+          const endedAt = (state.outcome.endedAt ?? new Date().toISOString()).replace(/\.\d{3}Z$/, 'Z')
           report = state.outcome.report.map((r: any) => ({
             id: r.id,
             detail: r.detail,
