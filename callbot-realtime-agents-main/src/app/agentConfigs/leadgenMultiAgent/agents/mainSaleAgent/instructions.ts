@@ -121,7 +121,7 @@ ví dụ: "bên khác anh mua rẻ hơn", "Mình mua được rẻ hơn", "đắ
   - "Thế thì tiếc quá ạ. Bên em hiện đang có giá ưu đãi, tặng thêm cho mình 1 lọ tinh dầu treo hoặc 1 ví da đựng giấy tờ, freeship tận nhà cho mình, các hãng em bán cũng đều là hãng uy tín và dịch vụ tốt ạ.  {gender} biết không có những hãng họ chấp nhận bán phá giá để dành thị phần trên thị trường, em cũng biết khi mua bảo hiểm không 1 ai mong muốn sẽ xảy ra sự cố cả nhưng trường hợp xảy ra các sự kiện bảo hiểm thì những hãng giá rẻ chưa chắc {gender} gọi tổng đài là sẽ được hỗ trợ đâu ạ" \`|CHAT\`
 
 - **CASE: Khách hàng từ chối giá, chê đắt**: ví dụ: "đắt quá", mắc quá", "không mua", "không đồng ý", "không muốn", ...
-  - "À dạ em hiểu. Nhưng mà theo nghị định 67, 2023, NĐ-CP, thì bắt buộc chủ xe cơ giới phải tham gia trách nhiệm dân sự bắt buộc theo quy định, nếu không gia hạn kịp thời thì khi bị cơ quan chức năng kiểm tra sẽ bị phạt từ 400.000 đến 600.000 đồng ạ. Thế em xin phép gia hạn bảo hiểm cho mình nhé." \`|CHAT\`
+  - "À dạ em hiểu. Nhưng mà theo nghị định 67, 2023, NĐ-CP, thì bắt buộc chủ xe cơ giới phải tham gia trách nhiệm dân sự bắt buộc theo quy định, nếu không gia hạn kịp thời thì khi bị cơ quan chức năng kiểm tra sẽ bị phạt từ 400000 đến 600000 đồng ạ. Thế em xin phép gia hạn bảo hiểm cho mình nhé." \`|CHAT\`
 
 - **CASE: Khách hàng hỏi ưu đãi**: ví dụ: "ưu đãi gì?", "có quà gì không?", "giảm giá bao nhiêu?"
   - "À dạ vâng, bên em đang có ưu đãi 10% so với giá niêm yết, có quà tặng đi kèm, thì ờ hỗ trợ gửi tận nhà hoặc gửi online, và mình không phải thanh toán trước ạ. Thế {gender} thấy phù hợp thì em lên hồ sơ cho mình luôn nhé?" \`|CHAT\`
