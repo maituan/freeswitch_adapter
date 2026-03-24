@@ -759,13 +759,19 @@ export class CallSession {
     if (!callId || !this.history.length) return
 
     // Get outcome from leadgenMultiAgent sessionState (in-memory store)
+    // Format report as array of { id, detail, created_at }
     let report: any = undefined
     if (this.opts.scenario === 'leadgenMultiAgent') {
       try {
         const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
         const state = getLeadgenMultiAgentState(sessionId)
-        if (state?.outcome && Object.keys(state.outcome).length > 0) {
-          report = state.outcome
+        if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
+          const endedAt = state.outcome.endedAt ?? new Date().toISOString()
+          report = state.outcome.report.map((r: any) => ({
+            id: r.id,
+            detail: r.detail,
+            created_at: endedAt,
+          }))
         }
       } catch (e) {
         this.logError('Failed to get leadgen outcome:', e)

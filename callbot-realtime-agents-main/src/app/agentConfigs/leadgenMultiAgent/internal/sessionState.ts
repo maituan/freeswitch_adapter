@@ -55,7 +55,7 @@ export type LeadgenMultiAgentSessionState = {
     priceAccepted: boolean;
   };
   outcome: {
-    report?: string;
+    report?: Array<{ id: number; detail: string }>;
     issueType?: string;
     level?: number;
     callOutcome?: string;
