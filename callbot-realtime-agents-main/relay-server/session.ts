@@ -2,7 +2,9 @@ import { WebSocket } from 'ws'
 import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
 import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext, PromptOverrides } from '../src/app/agentConfigs/leadgenMultiAgent'
+import { setLeadgenAgentV2RuntimeContext } from '../src/app/agentConfigs/leadgenAgentV2'
 import { getLeadgenMultiAgentState } from '../src/app/agentConfigs/leadgenMultiAgent/internal/sessionState'
+import { getLeadgenMultiAgentState as getLeadgenAgentV2State } from '../src/app/agentConfigs/leadgenAgentV2/internal/sessionState'
 import { AsrClient } from './asrClient'
 import { streamTTSAudio, StreamingTTS } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
@@ -151,26 +153,28 @@ export class CallSession {
     const cd = this.opts.customData ?? {}
     const mp = this.opts.mediaParams ?? {}
 
-    // Inject per-session runtime context for leadgenMultiAgent
+    // Inject per-session runtime context for leadgen scenarios
+    const leadgenRuntimeCtx = {
+      sessionId: String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId,
+      leadId:             cd.leadId ?? cd.lead_id,
+      phoneNumber:        this.opts.phone,
+      displayAgentName:   cd.display_agent_name,
+      overrideGender:     cd.gender,
+      overrideName:       cd.name,
+      overridePlate:      cd.plate,
+      overrideVehicleType: cd.vehicle_type,
+      overrideNumSeats:   cd.num_seats != null ? Number(cd.num_seats) : undefined,
+      overrideIsBusiness: cd.is_business != null ? (cd.is_business === true || cd.is_business === 'true') : undefined,
+      overrideWeightTons: cd.weight_tons != null ? Number(cd.weight_tons) : undefined,
+      overrideExpiryDate: cd.expiry_date,
+      overrideAddress:    cd.address,
+      overrideBrand:      cd.brand,
+      overrideColor:      cd.color,
+    }
     if (this.opts.scenario === 'leadgenMultiAgent') {
-      const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
-      setLeadgenMultiAgentRuntimeContext({
-        sessionId,
-        leadId:             cd.leadId ?? cd.lead_id,
-        phoneNumber:        this.opts.phone,
-        displayAgentName:   cd.display_agent_name,
-        overrideGender:     cd.gender,
-        overrideName:       cd.name,
-        overridePlate:      cd.plate,
-        overrideVehicleType: cd.vehicle_type,
-        overrideNumSeats:   cd.num_seats != null ? Number(cd.num_seats) : undefined,
-        overrideIsBusiness: cd.is_business != null ? (cd.is_business === true || cd.is_business === 'true') : undefined,
-        overrideWeightTons: cd.weight_tons != null ? Number(cd.weight_tons) : undefined,
-        overrideExpiryDate: cd.expiry_date,
-        overrideAddress:    cd.address,
-        overrideBrand:      cd.brand,
-        overrideColor:      cd.color,
-      })
+      setLeadgenMultiAgentRuntimeContext(leadgenRuntimeCtx)
+    } else if (this.opts.scenario === 'leadgenAgentV2') {
+      setLeadgenAgentV2RuntimeContext(leadgenRuntimeCtx)
     }
 
     // 1. Create OpenAI Realtime session.
@@ -761,10 +765,11 @@ export class CallSession {
     // Get outcome from leadgenMultiAgent sessionState (in-memory store)
     // Format report as array of { id, detail, created_at }
     let report: any = undefined
-    if (this.opts.scenario === 'leadgenMultiAgent') {
+    if (this.opts.scenario === 'leadgenMultiAgent' || this.opts.scenario === 'leadgenAgentV2') {
       try {
         const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
-        const state = getLeadgenMultiAgentState(sessionId)
+        const stateFn = this.opts.scenario === 'leadgenAgentV2' ? getLeadgenAgentV2State : getLeadgenMultiAgentState
+        const state = stateFn(sessionId)
         if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
           const endedAt = (state.outcome.endedAt ?? new Date().toISOString()).replace(/\.\d{3}Z$/, 'Z')
           report = state.outcome.report.map((r: any) => ({
