@@ -164,7 +164,7 @@ export class CallSession {
         overridePlate:      cd.plate,
         overrideVehicleType: cd.vehicle_type,
         overrideNumSeats:   cd.num_seats != null ? Number(cd.num_seats) : undefined,
-        overrideIsBusiness: cd.is_business != null ? Boolean(cd.is_business) : undefined,
+        overrideIsBusiness: cd.is_business != null ? (cd.is_business === true || cd.is_business === 'true') : undefined,
         overrideWeightTons: cd.weight_tons != null ? Number(cd.weight_tons) : undefined,
         overrideExpiryDate: cd.expiry_date,
         overrideAddress:    cd.address,
@@ -759,13 +759,19 @@ export class CallSession {
     if (!callId || !this.history.length) return
 
     // Get outcome from leadgenMultiAgent sessionState (in-memory store)
+    // Format report as array of { id, detail, created_at }
     let report: any = undefined
     if (this.opts.scenario === 'leadgenMultiAgent') {
       try {
         const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
         const state = getLeadgenMultiAgentState(sessionId)
-        if (state?.outcome && Object.keys(state.outcome).length > 0) {
-          report = state.outcome
+        if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
+          const endedAt = (state.outcome.endedAt ?? new Date().toISOString()).replace(/\.\d{3}Z$/, 'Z')
+          report = state.outcome.report.map((r: any) => ({
+            id: r.id,
+            detail: r.detail,
+            created_at: endedAt,
+          }))
         }
       } catch (e) {
         this.logError('Failed to get leadgen outcome:', e)
@@ -774,6 +780,11 @@ export class CallSession {
     // Fallback to legacy _report from realtimeSession context
     if (!report) {
       report = (this.realtimeSession as any)?.context?.context?._report ?? undefined
+    }
+    // Default report if bot didn't call updateLeadgenState with outcome
+    if (!report || (Array.isArray(report) && report.length === 0)) {
+      const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+      report = [{ id: 60, detail: 'Không xác định', created_at: now }]
     }
 
     const payload: CallHistoryPayload = {
