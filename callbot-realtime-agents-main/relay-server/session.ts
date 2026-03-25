@@ -3,8 +3,10 @@ import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
 import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext, PromptOverrides } from '../src/app/agentConfigs/leadgenMultiAgent'
 import { setLeadgenAgentV2RuntimeContext } from '../src/app/agentConfigs/leadgenAgentV2'
+import { buildLeadgenMultiAgents as buildLeadgenDatAgents, setLeadgenMultiAgentRuntimeContext as setLeadgenDatRuntimeContext } from '../src/app/agentConfigs/leadgen_dat'
 import { getLeadgenMultiAgentState } from '../src/app/agentConfigs/leadgenMultiAgent/internal/sessionState'
 import { getLeadgenMultiAgentState as getLeadgenAgentV2State } from '../src/app/agentConfigs/leadgenAgentV2/internal/sessionState'
+import { getLeadgenMultiAgentState as getLeadgenDatState } from '../src/app/agentConfigs/leadgen_dat/internal/sessionState'
 import { AsrClient } from './asrClient'
 import { streamTTSAudio, StreamingTTS } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
@@ -141,9 +143,14 @@ export class CallSession {
     }
 
     // Always build fresh agents per session to avoid SDK internal state reuse across calls
-    let agents = this.opts.scenario === 'leadgenMultiAgent'
-      ? buildLeadgenMultiAgents(promptOverrides)
-      : allAgentSets[this.opts.scenario]
+    let agents: any
+    if (this.opts.scenario === 'leadgenMultiAgent') {
+      agents = buildLeadgenMultiAgents(promptOverrides)
+    } else if (this.opts.scenario === 'leadgen_dat') {
+      agents = buildLeadgenDatAgents()
+    } else {
+      agents = allAgentSets[this.opts.scenario]
+    }
     if (!agents?.length) {
       this.ws.send(JSON.stringify({ type: 'error', message: `Unknown scenario: ${this.opts.scenario}` }))
       this.ws.close()
@@ -175,6 +182,8 @@ export class CallSession {
       setLeadgenMultiAgentRuntimeContext(leadgenRuntimeCtx)
     } else if (this.opts.scenario === 'leadgenAgentV2') {
       setLeadgenAgentV2RuntimeContext(leadgenRuntimeCtx)
+    } else if (this.opts.scenario === 'leadgen_dat') {
+      setLeadgenDatRuntimeContext(leadgenRuntimeCtx)
     }
 
     // 1. Create OpenAI Realtime session.
@@ -765,10 +774,13 @@ export class CallSession {
     // Get outcome from leadgenMultiAgent sessionState (in-memory store)
     // Format report as array of { id, detail, created_at }
     let report: any = undefined
-    if (this.opts.scenario === 'leadgenMultiAgent' || this.opts.scenario === 'leadgenAgentV2') {
+    const leadgenScenarios = ['leadgenMultiAgent', 'leadgenAgentV2', 'leadgen_dat']
+    if (leadgenScenarios.includes(this.opts.scenario)) {
       try {
         const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
-        const stateFn = this.opts.scenario === 'leadgenAgentV2' ? getLeadgenAgentV2State : getLeadgenMultiAgentState
+        const stateFn = this.opts.scenario === 'leadgenAgentV2' ? getLeadgenAgentV2State
+          : this.opts.scenario === 'leadgen_dat' ? getLeadgenDatState
+          : getLeadgenMultiAgentState
         const state = stateFn(sessionId)
         if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
           const endedAt = (state.outcome.endedAt ?? new Date().toISOString()).replace(/\.\d{3}Z$/, 'Z')

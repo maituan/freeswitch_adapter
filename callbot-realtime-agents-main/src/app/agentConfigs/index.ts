@@ -10,6 +10,7 @@ import { leadgenTndsScenario, leadgenTndsMetadata } from './leadgenTNDS';
 import { insuranceCarebotScenario, insuranceCarebotMetadata } from './insuranceCarebot';
 import { leadgenMultiAgentScenario } from './leadgenMultiAgent';
 import { leadgenAgentV2Scenario } from './leadgenAgentV2';
+import { leadgenMultiAgentScenario as leadgenDatScenario } from './leadgen_dat';
 
 import type { RealtimeAgent } from '@openai/agents/realtime';
 
@@ -27,6 +28,7 @@ export const allAgentSets: Record<string, RealtimeAgent[]> = {
   carebotAuto365: insuranceCarebotScenario,
   leadgenMultiAgent: leadgenMultiAgentScenario,
   leadgenAgentV2: leadgenAgentV2Scenario.agents,
+  leadgen_dat: leadgenDatScenario,
 };
 
 // Metadata for scenarios (e.g., to control UI behavior)

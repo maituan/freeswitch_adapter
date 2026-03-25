@@ -43,6 +43,9 @@ import { insuranceCarebotScenario } from "@/app/agentConfigs/insuranceCarebot";
 import type { CampaignType, PreferredPronoun } from "@/app/agentConfigs/insuranceCarebot/core/contextSchema";
 import { createRenewalReminderAgent } from "@/app/agentConfigs/insuranceCarebot/scenarios/renewalReminderAgent";
 import { leadgenMultiAgentScenario, setLeadgenMultiAgentRuntimeContext } from "@/app/agentConfigs/leadgenMultiAgent";
+import { leadgenAgentV2Scenario } from "@/app/agentConfigs/leadgenAgentV2";
+import { setLeadgenAgentV2RuntimeContext } from "@/app/agentConfigs/leadgenAgentV2";
+import { leadgenMultiAgentScenario as leadgenDatScenario, setLeadgenMultiAgentRuntimeContext as setLeadgenDatRuntimeContext } from "@/app/agentConfigs/leadgen_dat";
 
 // Map used by connect logic for scenarios defined via the SDK.
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
@@ -57,6 +60,8 @@ const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
   leadgenTNDS: leadgenTndsScenario,
   carebotAuto365: insuranceCarebotScenario,
   leadgenMultiAgent: leadgenMultiAgentScenario,
+  leadgenAgentV2: leadgenAgentV2Scenario.agents,
+  leadgen_dat: leadgenDatScenario,
 };
 
 const carebotCampaignTypes = new Set<CampaignType>([
@@ -597,7 +602,8 @@ function App() {
           customData = { agentConfig: agentSetKey, sessionId: callSessionId };
         }
 
-        if (agentSetKey === 'leadgenMultiAgent') {
+        const isLeadgenScenario = ['leadgenMultiAgent', 'leadgenAgentV2', 'leadgen_dat'].includes(agentSetKey);
+        if (isLeadgenScenario) {
           const parsedSeats = parseInt(multiNumSeats.trim(), 10);
           const parsedWeight = parseFloat(multiWeightTons.trim());
           const runtimeOverrides = {
@@ -616,7 +622,10 @@ function App() {
             overrideWeightTons:  Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : undefined,
             overrideExpiryDate:  multiExpiryDate.trim() || undefined,
           };
+          // Set runtime context for whichever leadgen scenario is selected
           setLeadgenMultiAgentRuntimeContext(runtimeOverrides);
+          setLeadgenAgentV2RuntimeContext(runtimeOverrides);
+          setLeadgenDatRuntimeContext(runtimeOverrides);
           customData = {
             session_id:   callSessionId,
             phone:        runtimeOverrides.phoneNumber,
@@ -1182,7 +1191,7 @@ function App() {
         </div>
       )}
 
-      {agentSetKey === 'leadgenMultiAgent' && (
+      {['leadgenMultiAgent', 'leadgenAgentV2', 'leadgen_dat'].includes(agentSetKey) && (
         <div className="px-5 pb-2 flex items-end gap-2 flex-wrap">
           <div className="flex flex-col">
             <label className="text-xs text-gray-600">Xưng hô</label>
