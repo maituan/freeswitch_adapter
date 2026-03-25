@@ -1,5 +1,10 @@
 export type VehicleType = 'car' | 'pickup' | 'truck';
 
+export type LeadgenOutcomeReportLabel = {
+  id: number;
+  detail: string;
+};
+
 export type LeadgenMultiAgentRuntimeContext = {
   sessionId?: string;
   leadId?: string;
@@ -55,7 +60,7 @@ export type LeadgenMultiAgentSessionState = {
     priceAccepted: boolean;
   };
   outcome: {
-    report?: string;
+    report?: LeadgenOutcomeReportLabel[];
     issueType?: string;
     level?: number;
     callOutcome?: string;
@@ -77,6 +82,31 @@ export function setLeadgenMultiAgentRuntimeContext(next: LeadgenMultiAgentRuntim
 export function getLeadgenMultiAgentRuntimeContext(sessionId: string): LeadgenMultiAgentRuntimeContext {
   const key = String(sessionId ?? '__default__').trim() || '__default__';
   return runtimeContextStore.get(key) ?? {};
+}
+
+function mergeOutcomeReportLabels(
+  current: LeadgenOutcomeReportLabel[] | undefined,
+  incoming: LeadgenOutcomeReportLabel[] | undefined,
+): LeadgenOutcomeReportLabel[] | undefined {
+  if (!incoming?.length) {
+    return current;
+  }
+
+  const merged = new Map<number, LeadgenOutcomeReportLabel>();
+
+  for (const label of current ?? []) {
+    if (typeof label?.id === 'number') {
+      merged.set(label.id, label);
+    }
+  }
+
+  for (const label of incoming) {
+    if (typeof label?.id === 'number') {
+      merged.set(label.id, label);
+    }
+  }
+
+  return Array.from(merged.values());
 }
 
 export function createDefaultLeadgenMultiAgentState(
@@ -189,6 +219,7 @@ export function patchLeadgenMultiAgentState(
     outcome: {
       ...current.outcome,
       ...(patch.outcome ?? {}),
+      report: mergeOutcomeReportLabels(current.outcome.report, patch.outcome?.report),
     },
     updatedAt: new Date().toISOString(),
   };

@@ -6,11 +6,22 @@ import {
   getLeadgenMultiAgentState,
   patchLeadgenMultiAgentState,
   getLeadgenMultiAgentRuntimeContext,
+  type LeadgenOutcomeReportLabel,
   type LeadgenMultiAgentSessionState,
   type VehicleType,
 } from './internal/sessionState';
 
 const ALLOWED_DISCOUNT_RATES: DiscountRate[] = [20, 25, 30, 35, 40];
+const OUTCOME_REPORT_LABELS: LeadgenOutcomeReportLabel[] = [
+  { id: 39, detail: 'Khách hàng tiềm năng' },
+  { id: 35, detail: 'Đồng ý/quan tâm' },
+  { id: 33, detail: 'Đồng ý kết bạn Zalo' },
+  { id: 41, detail: 'KH bán xe' },
+  { id: 38, detail: 'Khách chửi bậy/gay gắt' },
+  { id: 37, detail: 'Không có nhu cầu' },
+  { id: 36, detail: 'Đã mua' },
+  { id: 34, detail: 'Hẹn gọi lại' },
+];
 
 type CalcTndsFeeArgs = {
   vehicleType?: VehicleType;
@@ -23,9 +34,7 @@ type CalcTndsFeeArgs = {
 
 function resolveSessionId(runContext: any): string {
   const cd = runContext?.context?.customData ?? {};
-  return String(
-    cd.session_id ?? runContext?.context?.callId ?? '__default__'
-  ).trim() || '__default__';
+  return String(cd.session_id ?? runContext?.context?.callId ?? '__default__').trim() || '__default__';
 }
 
 function nonEmpty(value?: string): string | undefined {
@@ -276,15 +285,16 @@ export const updateLeadgenStateTool = tool({
         properties: {
           report: {
             type: 'array',
-            description: 'Danh sách nhãn kết quả cuộc gọi (có thể gắn nhiều nhãn)',
+            description: `Danh sách nhãn kết quả cuộc gọi. Tool sẽ tự cộng dồn và loại trùng theo id. Giá trị hợp lệ: ${OUTCOME_REPORT_LABELS.map((label) => `${label.id}=${label.detail}`).join(', ')}`,
             items: {
               type: 'object',
               properties: {
-                id: { type: 'number', description: 'ID nhãn: 39=Khách hàng tiềm năng, 35=Đồng ý/quan tâm, 33=Đồng ý kết bạn Zalo, 41=KH bán xe, 38=Khách chửi bậy/gay gắt, 37=Không có nhu cầu, 36=Đã mua, 34=Hẹn gọi lại' },
-                detail: { type: 'string', description: 'Tên nhãn kết quả' }
+                id: { type: 'number', description: 'ID nhãn kết quả cuộc gọi' },
+                detail: { type: 'string', description: 'Tên nhãn kết quả cuộc gọi' },
               },
-              required: ['id', 'detail']
-            }
+              required: ['id', 'detail'],
+              additionalProperties: false,
+            },
           },
           issueType: { type: 'string' },
           level: { type: 'number' },
