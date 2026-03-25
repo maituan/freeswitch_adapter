@@ -781,6 +781,11 @@ export class CallSession {
     if (!report) {
       report = (this.realtimeSession as any)?.context?.context?._report ?? undefined
     }
+    // Default report if bot didn't call updateLeadgenState with outcome
+    if (!report || (Array.isArray(report) && report.length === 0)) {
+      const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+      report = [{ id: 60, detail: 'Không xác định', created_at: now }]
+    }
 
     const payload: CallHistoryPayload = {
       call_id: this.opts.callId || '',
