@@ -164,7 +164,7 @@ export class CallSession {
         overridePlate:      cd.plate,
         overrideVehicleType: cd.vehicle_type,
         overrideNumSeats:   cd.num_seats != null ? Number(cd.num_seats) : undefined,
-        overrideIsBusiness: cd.is_business != null ? Boolean(cd.is_business) : undefined,
+        overrideIsBusiness: cd.is_business != null ? (cd.is_business === true || cd.is_business === 'true') : undefined,
         overrideWeightTons: cd.weight_tons != null ? Number(cd.weight_tons) : undefined,
         overrideExpiryDate: cd.expiry_date,
         overrideAddress:    cd.address,
