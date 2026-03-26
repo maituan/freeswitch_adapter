@@ -290,9 +290,14 @@ func handleAnswer(ev *eventsocket.Event) {
 	}
 	if relayClient == nil {
 		var err error
+		// Use originate UUID as callId (primary ID); fall back to SIP UUID
+		callID := pd.CallUUID
+		if callID == "" {
+			callID = uuid
+		}
 		relayClient, err = relay.Connect(relay.ConnectParams{
 			RelayURL:    cfg.Relay.URL,
-			CallID:      uuid,
+			CallID:      callID,
 			Scenario:    scenario,
 			Phone:       phone,
 			VoiceID:     pd.VoiceID,
