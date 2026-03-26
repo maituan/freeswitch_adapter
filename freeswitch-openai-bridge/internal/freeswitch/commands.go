@@ -6,10 +6,10 @@ import (
 )
 
 func (es *EventSocket) StartRecording(uuid, filename string) error {
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only true", uuid))
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_stereo false", uuid))
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s timer_name soft", uuid))
+	// es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only true", uuid))
+	// es.SendAPI(fmt.Sprintf("uuid_setvar %s record_stereo false", uuid))
+	// es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
+	// es.SendAPI(fmt.Sprintf("uuid_setvar %s timer_name soft", uuid))
 	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s start %s 8000 1", uuid, filename))
 	return err
 }
@@ -19,16 +19,14 @@ func (es *EventSocket) StartWAVRecording(uuid, filename string) error {
 	return err
 }
 
-// StartStereoRecording starts a stereo recording on the given channel that
-// captures both read (user) and write (bot TTS) audio. Used on the SIP leg
-// so that uuid_broadcast audio is included in the recording.
-func (es *EventSocket) StartStereoRecording(uuid, filename string) error {
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only false", uuid))
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s RECORD_STEREO true", uuid))
-	es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
-	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s start %s", uuid, filename))
-	return err
-}
+// // [COMMENTED OUT] StartStereoRecording — disabled along with stereo recording in main.go
+// func (es *EventSocket) StartStereoRecording(uuid, filename string) error {
+// 	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only false", uuid))
+// 	es.SendAPI(fmt.Sprintf("uuid_setvar %s RECORD_STEREO true", uuid))
+// 	es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
+// 	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s start %s", uuid, filename))
+// 	return err
+// }
 
 func (es *EventSocket) StopRecording(uuid, filename string) error {
 	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s stop %s", uuid, filename))
