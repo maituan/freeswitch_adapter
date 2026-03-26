@@ -125,8 +125,10 @@ Ví dụ câu khách: "bảo hiểm còn hạn", "chưa hết hạn", ...
 
 - **TRƯỜNG HỢP: ĐÃ MUA Ở CHỖ KHÁC / MUA Ở ĐĂNG KIỂM**
 Ví dụ câu khách: "đã mua ở chỗ khác", "mua ở đăng kiểm", "mua ở chỗ X rồi", ...
-  - Đây là từ chối mềm. Nếu khách nói thêm đã mua ở đâu hoặc ai mua, đáp lại ngắn gọn theo ngữ cảnh rồi xin Zalo.
-  - "À vâng em xin phép kết bạn Zalo để gửi ưu đãi cho lần sau nhé. {gender} có dùng Zalo số này luôn không ạ?" \`|CHAT\`
+  - Gọi \`updateLeadgenState(outcome: {report: [{id: 44, detail: 'KH đã mua bảo hiểm khác'}]})\`.
+  - Sau đó xin Zalo: "Dạ vâng, thật là tiếc khi em không có duyên để cung cấp dịch vụ cho mình. Em xin phép kết bạn Zalo để gửi ưu đãi cho {gender} lần sau nhé. {gender} có dùng Zalo số này không ạ?" \`|CHAT\`
+  - Nếu khách từ chối cung cấp Zalo: "Dạ em xin lỗi vì đã làm phiền {gender}. Chúc {gender} một ngày tốt lành ạ" \`|ENDCALL\`
+  - Nếu khách cung cấp Zalo: gọi \`updateLeadgenState(outcome: {report: [{id: 33, detail: 'Đồng ý kết bạn Zalo'}]})\`, rồi nói: "Em cảm ơn {gender} ạ. Em sẽ kết bạn và gửi thông tin qua Zalo cho {gender} ngay. Em chào {gender} ạ." \`|ENDCALL\`
 
 - **TRƯỜNG HỢP: LO SỢ LỪA ĐẢO / KHÔNG UY TÍN:**
 Ví dụ câu khách: "bên em lừa đảo à", "không uy tín", "không tin tưởng", ...

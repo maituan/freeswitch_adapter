@@ -810,7 +810,7 @@ export class CallSession {
           { id: 35, detail: 'Đồng ý/quan tâm', created_at: now },
         ]
       } else {
-        report = [{ id: 60, detail: 'Không xác định', created_at: now }]
+        report = [{ id: 43, detail: 'Không xác định', created_at: now }]
       }
     }
 
