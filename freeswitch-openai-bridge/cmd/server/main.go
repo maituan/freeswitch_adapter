@@ -361,7 +361,7 @@ func handleAnswer(ev *eventsocket.Event) {
 				return fmt.Errorf("PlayAudio: %w", err)
 			}
 			var err error
-			f, err = os.OpenFile(ttsPath, os.O_WRONLY, 0666)
+			f, err = os.OpenFile(ttsPath, os.O_RDWR, 0666)
 			if err != nil {
 				return fmt.Errorf("open fifo: %w", err)
 			}
@@ -484,7 +484,7 @@ func handleAnswer(ev *eventsocket.Event) {
 	// Audio in: recording FIFO → relay (blocks until FreeSWITCH opens write end after StartRecording)
 	go func() {
 		log.Printf("[AudioIn] Opening recording FIFO uuid=%s path=%s", uuid, recordPath)
-		f, err := os.OpenFile(recordPath, os.O_RDONLY, 0666)
+		f, err := os.OpenFile(recordPath, os.O_RDWR, 0666)
 		if err != nil {
 			log.Printf("[AudioIn] open recording fifo: %v", err)
 			return
