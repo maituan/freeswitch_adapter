@@ -333,6 +333,10 @@ func handleAnswer(ev *eventsocket.Event) {
 	// 		log.Printf("[Call] relay set_sip_uuid failed: %v", err)
 	// 	}
 	// }
+	// Send recording_uuid to relay for Kafka (now same as SIP leg UUID)
+	if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: uuid}); err != nil {
+		log.Printf("[Call] relay set_sip_uuid failed: %v", err)
+	}
 	// Signal the relay that the call was answered — triggers response.create
 	if err := relayClient.SendControl(relay.ControlMsg{Type: "go"}); err != nil {
 		log.Printf("[Call] relay go signal failed uuid=%s: %v", uuid, err)
