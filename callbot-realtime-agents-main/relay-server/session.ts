@@ -494,15 +494,15 @@ export class CallSession {
       // After first playback_stop, ASR stream is restarted to flush pre-TTS audio.
       if (!this.botSpokenOnce) return
       if (!this.firstPlaybackStopped) return
-      if (isFinal && transcript.trim()) {
+      if (isFinal) {
+        const text = (transcript ?? '').trim() || '<silence>'
         if (this.isProcessing || this.isPlayingAudio) {
-          this.log(`ASR suppressed (processing=${this.isProcessing} playing=${this.isPlayingAudio}): "${transcript.trim().substring(0, 80)}"`)
+          this.log(`ASR suppressed (processing=${this.isProcessing} playing=${this.isPlayingAudio}): "${text.substring(0, 80)}"`)
           return
         }
-        const text = transcript.trim()
         this.log(`USER: "${text.substring(0, 200)}"`)
         this.trace?.span({ name: 'asr', input: text }).end({ output: text })
-        this.addUserMessage(text, transcript)
+        this.addUserMessage(text, transcript ?? '')
         this.isProcessing = true
         this.sendMessageTime = new Date()
         this.turnLlmStartTime = null
