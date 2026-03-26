@@ -801,7 +801,17 @@ export class CallSession {
     // Default report if bot didn't call updateLeadgenState with outcome
     if (!report || (Array.isArray(report) && report.length === 0)) {
       const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
-      report = [{ id: 60, detail: 'Không xác định', created_at: now }]
+      const lastBot = [...this.history].reverse().find(m => m.role === 'assistant')
+      const lastText = (lastBot?.origin_content || lastBot?.content || '').toLowerCase()
+
+      if (lastText.includes('bằng số cá nhân')) {
+        report = [
+          { id: 39, detail: 'Khách hàng tiềm năng', created_at: now },
+          { id: 35, detail: 'Đồng ý/quan tâm', created_at: now },
+        ]
+      } else {
+        report = [{ id: 60, detail: 'Không xác định', created_at: now }]
+      }
     }
 
     const payload: CallHistoryPayload = {
