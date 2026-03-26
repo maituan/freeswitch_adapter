@@ -685,13 +685,6 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 		botID = fmt.Sprintf("bot-%d", time.Now().UnixNano())
 	}
 
-	callUUID, err := esl.Originate(target, callerID, botID, scenario)
-	if err != nil {
-		log.Printf("[API] Originate failed target=%s: %v", target, err)
-		jsonError(w, fmt.Sprintf("originate failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
 	cd := req.CustomData
 	if cd == nil {
 		cd = make(map[string]interface{})
@@ -712,6 +705,26 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 	if phone == "" {
 		phone = req.SIPEndpoint
 	}
+
+	// Store pendingByPhone BEFORE originate so handleAnswer can find
+	// this call even if the SIP leg answers before originate returns.
+	earlyPD := preCallData{
+		Scenario:    scenario,
+		VoiceID:     req.VoiceID,
+		Phone:       phone,
+		CustomData:  cd,
+		MediaParams: req.MediaParams,
+	}
+	pendingByPhone.Store(phoneKey(phone), earlyPD)
+
+	callUUID, err := esl.Originate(target, callerID, botID, scenario)
+	if err != nil {
+		pendingByPhone.Delete(phoneKey(phone))
+		log.Printf("[API] Originate failed target=%s: %v", target, err)
+		jsonError(w, fmt.Sprintf("originate failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	pd := preCallData{
 		Scenario:    scenario,
 		VoiceID:     req.VoiceID,
@@ -723,7 +736,7 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
-	pendingByPhone.Store(phoneKey(phone), pd)
+	pendingByPhone.Store(phoneKey(phone), pd) // update with full data
 
 	log.Printf("[API] Outbound call uuid=%s target=%s scenario=%s (relay pre-warming)", callUUID, target, scenario)
 
@@ -742,8 +755,18 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 	}
 	botID := fmt.Sprintf("bot-%d", time.Now().UnixNano())
 
+	// Store pendingByPhone BEFORE originate so handleAnswer can find
+	// this call even if the SIP leg answers before originate returns.
+	earlyPD := preCallData{
+		Scenario:   scenario,
+		Phone:      phone,
+		CustomData: customData,
+	}
+	pendingByPhone.Store(phoneKey(phone), earlyPD)
+
 	callUUID, err := esl.Originate(target, callerID, botID, scenario)
 	if err != nil {
+		pendingByPhone.Delete(phoneKey(phone))
 		return "", err
 	}
 
@@ -756,7 +779,7 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
-	pendingByPhone.Store(phoneKey(phone), pd)
+	pendingByPhone.Store(phoneKey(phone), pd) // update with full data
 	return callUUID, nil
 }
 

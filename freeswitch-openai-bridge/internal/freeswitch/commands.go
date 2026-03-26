@@ -68,7 +68,7 @@ func (es *EventSocket) Originate(target, callerID, callBotId, scenario string) (
 		endpoint,
 	)
 
-	result, err := es.SendAPI(cmd)
+	result, err := es.SendOriginate(cmd)
 	if err != nil {
 		return "", fmt.Errorf("originate %s: %w", target, err)
 	}

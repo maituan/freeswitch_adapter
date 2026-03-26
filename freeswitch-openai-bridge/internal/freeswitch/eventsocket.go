@@ -15,12 +15,14 @@ type EventHandler func(event *eventsocket.Event)
 
 type EventSocket struct {
 	conn       *eventsocket.Connection // event-only connection (HandleEvents loop)
-	apiConn    *eventsocket.Connection // dedicated connection for API commands
+	apiConn    *eventsocket.Connection // short API commands (uuid_record, uuid_broadcast, etc.)
+	origConn   *eventsocket.Connection // dedicated for originate (long-blocking)
 	config     *config.FreeSWITCHConfig
 	handlers   map[string]EventHandler
 	preProcess func(*eventsocket.Event) // called synchronously before handler dispatch
 	mu         sync.Mutex
-	apiMu      sync.Mutex // serializes all API commands on apiConn
+	apiMu      sync.Mutex // serializes short API commands on apiConn
+	origMu     sync.Mutex // serializes originate on origConn (never blocks apiMu)
 }
 
 // SetPreProcess registers a function that runs synchronously in the event loop
@@ -58,8 +60,6 @@ func (es *EventSocket) maintainConnection() {
 				continue
 			}
 
-			// Dedicated API connection — separate TCP socket so commands
-			// never compete with event reads on the event connection.
 			log.Printf("[ESL] Connecting API channel to %s...", es.config.Host)
 			apiConn, err := eventsocket.Dial(es.config.Host, es.config.Password)
 			if err != nil {
@@ -69,23 +69,36 @@ func (es *EventSocket) maintainConnection() {
 				continue
 			}
 
+			log.Printf("[ESL] Connecting originate channel to %s...", es.config.Host)
+			origConn, err := eventsocket.Dial(es.config.Host, es.config.Password)
+			if err != nil {
+				log.Printf("[ESL] Originate connect failed: %v. Retrying in 5s...", err)
+				conn.Close()
+				apiConn.Close()
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
 			es.mu.Lock()
 			es.conn = conn
 			es.apiConn = apiConn
+			es.origConn = origConn
 			es.mu.Unlock()
 
 			if err := es.subscribe(); err != nil {
 				log.Printf("[ESL] Subscribe failed: %v", err)
 				conn.Close()
 				apiConn.Close()
+				origConn.Close()
 				es.mu.Lock()
 				es.conn = nil
 				es.apiConn = nil
+				es.origConn = nil
 				es.mu.Unlock()
 				continue
 			}
 
-			log.Printf("[ESL] Both connections ready (event + API)")
+			log.Printf("[ESL] All connections ready (event + API + originate)")
 
 			// Blocks until connection drops
 			es.HandleEvents()
@@ -96,6 +109,10 @@ func (es *EventSocket) maintainConnection() {
 			if es.apiConn != nil {
 				es.apiConn.Close()
 				es.apiConn = nil
+			}
+			if es.origConn != nil {
+				es.origConn.Close()
+				es.origConn = nil
 			}
 			es.mu.Unlock()
 		}
@@ -192,6 +209,35 @@ func (es *EventSocket) SendAPI(command string) (string, error) {
 	return result, nil
 }
 
+// SendOriginate sends an originate command on its own dedicated connection.
+// Uses origMu (not apiMu) so it never blocks short commands like uuid_broadcast.
+func (es *EventSocket) SendOriginate(command string) (string, error) {
+	es.mu.Lock()
+	c := es.origConn
+	es.mu.Unlock()
+
+	if c == nil {
+		return "", fmt.Errorf("FreeSWITCH not connected")
+	}
+
+	es.origMu.Lock()
+	defer es.origMu.Unlock()
+
+	log.Printf("[ESL] orig >> %s", command)
+	ev, err := c.Send(fmt.Sprintf("api %s", command))
+	if err != nil {
+		log.Printf("[ESL] orig << ERROR: %v", err)
+		return "", fmt.Errorf("originate: %w", err)
+	}
+
+	var result string
+	if ev != nil {
+		result = ev.Body
+	}
+	log.Printf("[ESL] orig << %s", result)
+	return result, nil
+}
+
 func (es *EventSocket) SendBgAPI(command string) (string, error) {
 	es.mu.Lock()
 	c := es.apiConn
@@ -229,5 +275,9 @@ func (es *EventSocket) Close() {
 	if es.apiConn != nil {
 		es.apiConn.Close()
 		es.apiConn = nil
+	}
+	if es.origConn != nil {
+		es.origConn.Close()
+		es.origConn = nil
 	}
 }
