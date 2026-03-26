@@ -14,11 +14,13 @@ import (
 type EventHandler func(event *eventsocket.Event)
 
 type EventSocket struct {
-	conn       *eventsocket.Connection
+	conn       *eventsocket.Connection // event-only connection (HandleEvents loop)
+	apiConn    *eventsocket.Connection // dedicated connection for API commands
 	config     *config.FreeSWITCHConfig
 	handlers   map[string]EventHandler
 	preProcess func(*eventsocket.Event) // called synchronously before handler dispatch
 	mu         sync.Mutex
+	apiMu      sync.Mutex // serializes all API commands on apiConn
 }
 
 // SetPreProcess registers a function that runs synchronously in the event loop
@@ -48,28 +50,42 @@ func (es *EventSocket) maintainConnection() {
 		es.mu.Unlock()
 
 		if needsConnect {
-			log.Printf("[ESL] Connecting to %s...", es.config.Host)
+			log.Printf("[ESL] Connecting event channel to %s...", es.config.Host)
 			conn, err := eventsocket.Dial(es.config.Host, es.config.Password)
 			if err != nil {
-				log.Printf("[ESL] Connect failed: %v. Retrying in 5s...", err)
+				log.Printf("[ESL] Event connect failed: %v. Retrying in 5s...", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			// Dedicated API connection — separate TCP socket so commands
+			// never compete with event reads on the event connection.
+			log.Printf("[ESL] Connecting API channel to %s...", es.config.Host)
+			apiConn, err := eventsocket.Dial(es.config.Host, es.config.Password)
+			if err != nil {
+				log.Printf("[ESL] API connect failed: %v. Retrying in 5s...", err)
+				conn.Close()
 				time.Sleep(5 * time.Second)
 				continue
 			}
 
 			es.mu.Lock()
 			es.conn = conn
+			es.apiConn = apiConn
 			es.mu.Unlock()
 
 			if err := es.subscribe(); err != nil {
 				log.Printf("[ESL] Subscribe failed: %v", err)
 				conn.Close()
+				apiConn.Close()
 				es.mu.Lock()
 				es.conn = nil
+				es.apiConn = nil
 				es.mu.Unlock()
 				continue
 			}
 
-			log.Printf("[ESL] Connected successfully")
+			log.Printf("[ESL] Both connections ready (event + API)")
 
 			// Blocks until connection drops
 			es.HandleEvents()
@@ -77,6 +93,10 @@ func (es *EventSocket) maintainConnection() {
 			log.Printf("[ESL] Connection lost. Reconnecting...")
 			es.mu.Lock()
 			es.conn = nil
+			if es.apiConn != nil {
+				es.apiConn.Close()
+				es.apiConn = nil
+			}
 			es.mu.Unlock()
 		}
 		time.Sleep(1 * time.Second)
@@ -147,12 +167,15 @@ func (es *EventSocket) processEvent(ev *eventsocket.Event) {
 
 func (es *EventSocket) SendAPI(command string) (string, error) {
 	es.mu.Lock()
-	c := es.conn
+	c := es.apiConn
 	es.mu.Unlock()
 
 	if c == nil {
 		return "", fmt.Errorf("FreeSWITCH not connected")
 	}
+
+	es.apiMu.Lock()
+	defer es.apiMu.Unlock()
 
 	log.Printf("[ESL] api >> %s", command)
 	ev, err := c.Send(fmt.Sprintf("api %s", command))
@@ -171,12 +194,15 @@ func (es *EventSocket) SendAPI(command string) (string, error) {
 
 func (es *EventSocket) SendBgAPI(command string) (string, error) {
 	es.mu.Lock()
-	c := es.conn
+	c := es.apiConn
 	es.mu.Unlock()
 
 	if c == nil {
 		return "", fmt.Errorf("FreeSWITCH not connected")
 	}
+
+	es.apiMu.Lock()
+	defer es.apiMu.Unlock()
 
 	log.Printf("[ESL] bgapi >> %s", command)
 	ev, err := c.Send(fmt.Sprintf("bgapi %s", command))
@@ -199,5 +225,9 @@ func (es *EventSocket) Close() {
 	if es.conn != nil {
 		es.conn.Close()
 		es.conn = nil
+	}
+	if es.apiConn != nil {
+		es.apiConn.Close()
+		es.apiConn = nil
 	}
 }
