@@ -222,8 +222,22 @@ func handleAnswer(ev *eventsocket.Event) {
 		scenario = "leadgenTNDS"
 	}
 
-	log.Printf("[Call] ANSWER uuid=%s phone=%s scenario=%s customData=%v",
-		uuid, phone, scenario, pd.CustomData)
+	// Resolve originate UUID (loopback-a) — the primary call ID for Kafka/API.
+	// pd.CallUUID is set when originate returns before SIP answer.
+	// When SIP answers first (earlyPD), pd.CallUUID is empty — use Other-Leg chain.
+	originateUUID := pd.CallUUID
+	if originateUUID == "" {
+		originateUUID = otherLeg // loopback-b UUID bridged to this SIP leg
+	}
+	if originateUUID == "" {
+		originateUUID = ev.Get("variable_origination_uuid")
+	}
+	if originateUUID == "" {
+		originateUUID = uuid // final fallback
+	}
+
+	log.Printf("[Call] ANSWER uuid=%s originateUUID=%s phone=%s scenario=%s customData=%v",
+		uuid, originateUUID, phone, scenario, pd.CustomData)
 
 	// Create session
 	sess := sessions.Create(uuid, phone)
@@ -290,14 +304,9 @@ func handleAnswer(ev *eventsocket.Event) {
 	}
 	if relayClient == nil {
 		var err error
-		// Use originate UUID as callId (primary ID); fall back to SIP UUID
-		callID := pd.CallUUID
-		if callID == "" {
-			callID = uuid
-		}
 		relayClient, err = relay.Connect(relay.ConnectParams{
 			RelayURL:    cfg.Relay.URL,
-			CallID:      callID,
+			CallID:      originateUUID,
 			Scenario:    scenario,
 			Phone:       phone,
 			VoiceID:     pd.VoiceID,
