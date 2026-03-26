@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -35,7 +36,7 @@ var (
 	pendingCalls     sync.Map // uuid -> preCallData
 	pendingByPhone   sync.Map // phone -> preCallData (fallback lookup for loopback calls)
 	bridgeUUIDs      sync.Map // tracks all UUIDs belonging to bridge-originated calls
-	loopbackBUUIDs   sync.Map // loopback-a UUID -> loopback-b UUID (recording file name)
+	loopbackBToA     sync.Map // loopback-b UUID -> loopback-a UUID (unused, kept for debug)
 	campaigns        *campaign.Manager
 )
 
@@ -105,6 +106,10 @@ func main() {
 		// Track loopback channels by name
 		if strings.HasPrefix(ch, "loopback/") {
 			bridgeUUIDs.Store(uid, true)
+			// loopback-b's Other-Leg is loopback-a (originate UUID)
+			if strings.HasSuffix(ch, "-b") && otherLeg != "" {
+				loopbackBToA.Store(uid, otherLeg)
+			}
 		}
 
 		// Chain propagation: if Other-Leg is a known bridge UUID, track this UUID too
@@ -222,22 +227,17 @@ func handleAnswer(ev *eventsocket.Event) {
 		scenario = "leadgenTNDS"
 	}
 
-	// Resolve originate UUID (loopback-a) — the primary call ID for Kafka/API.
-	// pd.CallUUID is set when originate returns before SIP answer.
-	// When SIP answers first (earlyPD), pd.CallUUID is empty — use Other-Leg chain.
-	originateUUID := pd.CallUUID
-	if originateUUID == "" {
-		originateUUID = otherLeg // loopback-b UUID bridged to this SIP leg
+	// Primary call ID — always available because we store pd before originate.
+	callID := pd.CallUUID
+	if callID == "" {
+		callID = ev.Get("variable_origination_uuid")
 	}
-	if originateUUID == "" {
-		originateUUID = ev.Get("variable_origination_uuid")
-	}
-	if originateUUID == "" {
-		originateUUID = uuid // final fallback
+	if callID == "" {
+		callID = uuid // final fallback
 	}
 
-	log.Printf("[Call] ANSWER uuid=%s originateUUID=%s phone=%s scenario=%s customData=%v",
-		uuid, originateUUID, phone, scenario, pd.CustomData)
+	log.Printf("[Call] ANSWER uuid=%s callID=%s phone=%s scenario=%s customData=%v",
+		uuid, callID, phone, scenario, pd.CustomData)
 
 	// Create session
 	sess := sessions.Create(uuid, phone)
@@ -306,7 +306,7 @@ func handleAnswer(ev *eventsocket.Event) {
 		var err error
 		relayClient, err = relay.Connect(relay.ConnectParams{
 			RelayURL:    cfg.Relay.URL,
-			CallID:      originateUUID,
+			CallID:      callID,
 			Scenario:    scenario,
 			Phone:       phone,
 			VoiceID:     pd.VoiceID,
@@ -724,24 +724,8 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 		phone = req.SIPEndpoint
 	}
 
-	// Store pendingByPhone BEFORE originate so handleAnswer can find
-	// this call even if the SIP leg answers before originate returns.
-	earlyPD := preCallData{
-		Scenario:    scenario,
-		VoiceID:     req.VoiceID,
-		Phone:       phone,
-		CustomData:  cd,
-		MediaParams: req.MediaParams,
-	}
-	pendingByPhone.Store(phoneKey(phone), earlyPD)
-
-	callUUID, err := esl.Originate(target, callerID, botID, scenario)
-	if err != nil {
-		pendingByPhone.Delete(phoneKey(phone))
-		log.Printf("[API] Originate failed target=%s: %v", target, err)
-		jsonError(w, fmt.Sprintf("originate failed: %v", err), http.StatusInternalServerError)
-		return
-	}
+	// Generate call UUID upfront — this is the primary ID for the entire system.
+	callUUID := genUUID()
 
 	pd := preCallData{
 		Scenario:    scenario,
@@ -752,9 +736,19 @@ func handleCallAPI(w http.ResponseWriter, r *http.Request) {
 		MediaParams: req.MediaParams,
 		RelayReady:  prewarmRelay(callUUID, scenario, phone, req.VoiceID, cd, req.MediaParams),
 	}
+	// Store BEFORE originate so handleAnswer always finds the call.
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
-	pendingByPhone.Store(phoneKey(phone), pd) // update with full data
+	pendingByPhone.Store(phoneKey(phone), pd)
+
+	if err := esl.Originate(callUUID, target, callerID, botID, scenario); err != nil {
+		bridgeUUIDs.Delete(callUUID)
+		pendingCalls.Delete(callUUID)
+		pendingByPhone.Delete(phoneKey(phone))
+		log.Printf("[API] Originate failed target=%s: %v", target, err)
+		jsonError(w, fmt.Sprintf("originate failed: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	log.Printf("[API] Outbound call uuid=%s target=%s scenario=%s (relay pre-warming)", callUUID, target, scenario)
 
@@ -772,21 +766,7 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 		callerID = "callbot"
 	}
 	botID := fmt.Sprintf("bot-%d", time.Now().UnixNano())
-
-	// Store pendingByPhone BEFORE originate so handleAnswer can find
-	// this call even if the SIP leg answers before originate returns.
-	earlyPD := preCallData{
-		Scenario:   scenario,
-		Phone:      phone,
-		CustomData: customData,
-	}
-	pendingByPhone.Store(phoneKey(phone), earlyPD)
-
-	callUUID, err := esl.Originate(target, callerID, botID, scenario)
-	if err != nil {
-		pendingByPhone.Delete(phoneKey(phone))
-		return "", err
-	}
+	callUUID := genUUID()
 
 	pd := preCallData{
 		Scenario:   scenario,
@@ -797,7 +777,14 @@ func originateCall(phone, callerID, scenario string, customData map[string]inter
 	}
 	bridgeUUIDs.Store(callUUID, true)
 	pendingCalls.Store(callUUID, pd)
-	pendingByPhone.Store(phoneKey(phone), pd) // update with full data
+	pendingByPhone.Store(phoneKey(phone), pd)
+
+	if err := esl.Originate(callUUID, target, callerID, botID, scenario); err != nil {
+		bridgeUUIDs.Delete(callUUID)
+		pendingCalls.Delete(callUUID)
+		pendingByPhone.Delete(phoneKey(phone))
+		return "", err
+	}
 	return callUUID, nil
 }
 
@@ -912,6 +899,16 @@ func makeFIFO(path string) error {
 	}
 	os.Chmod(path, 0666)
 	return nil
+}
+
+// genUUID generates a v4 UUID without external dependencies.
+func genUUID() string {
+	var b [16]byte
+	rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // phoneKey extracts the last 9 digits from a phone number for matching.
