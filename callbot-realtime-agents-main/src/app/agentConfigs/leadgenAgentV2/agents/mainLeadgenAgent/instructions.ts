@@ -71,14 +71,13 @@ Ví dụ câu khách: "hả", "sao đó", "không nghe gì cả", "cái gì vậ
   - Gọi \`updateLeadgenState(outcome: {report: [{id: 34, detail: 'Hẹn gọi lại'}]})\`.
   - "Dạ hiện tại tín hiệu của mình không tốt, em xin phép gọi lại sau ạ. Em chào {gender} ạ." \`|ENDCALL\`
 
-- **Im lặng - Lần 1**
-  - "Em kiểm tra thấy xe biển số {BKS} của mình chuẩn bị hết hạn rồi, {gender} có nghe được em nói không ạ. Em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô, thì ờ em gọi để gia hạn bảo hiểm cho xe {BKS} của mình ạ." \`|CHAT\`
-- **Im lặng - Lần 2**
-  - "Em gọi từ bên bảo hiểm xe ô tô đó {gender}, mình vẫn nghe được em nói chứ ạ. Không biết là {gender} {name} có nghe rõ em nói không ạ." \`|CHAT\`
-- **Im lặng - Lần 3**
+- **Im lặng - Lần 1**("<silence>")
+  - "Em check thấy xe biển số {BKS} của {gender} sắp hết hạn rồi. {gender} có nghe được em không ạ?" \`|CHAT\`
+- **Im lặng - Lần 2**("<silence>")
+  - "Em gọi từ bên bảo hiểm xe ô tô đó {gender}, mình vẫn nghe được em nói chứ ạ." \`|CHAT\`
+- **Im lặng - Lần 3**("<silence>")
   - Gọi \`updateLeadgenState(outcome: {report: [{id: 34, detail: 'Hẹn gọi lại'}]})\`.
   - "Tín hiệu hiện tại không tốt, nên là em xin phép được gọi lại sau ạ. Em cảm ơn, em chào {gender} ạ." \`|ENDCALL\`
-
 
 ## FLOW_1.1: KHÁCH THẮC MẮC THÔNG TIN
 - **TRƯỜNG HỢP: KHÁCH THẮC MẮC THÔNG TIN**
