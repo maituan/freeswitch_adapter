@@ -143,16 +143,16 @@ func handleAnswer(ev *eventsocket.Event) {
 	// Loopback legs: record UUID for chain tracking, then skip
 	if strings.HasPrefix(channelName, "loopback/") {
 		bridgeUUIDs.Store(uuid, true)
-		// Track loopback-b UUID for recording file lookup
-		if strings.HasSuffix(channelName, "-b") {
-			otherLeg := ev.Get("Other-Leg-Unique-ID")
-			if otherLeg != "" {
-				loopbackBUUIDs.Store(otherLeg, uuid) // loopback-a → loopback-b
-				log.Printf("[Call] ANSWER loopback-b uuid=%s other_leg(a)=%s", uuid, otherLeg)
-			} else {
-				log.Printf("[Call] ANSWER loopback-b uuid=%s (Other-Leg empty)", uuid)
-			}
-		}
+		// // Track loopback-b UUID for recording file lookup
+		// if strings.HasSuffix(channelName, "-b") {
+		// 	otherLeg := ev.Get("Other-Leg-Unique-ID")
+		// 	if otherLeg != "" {
+		// 		loopbackBUUIDs.Store(otherLeg, uuid) // loopback-a → loopback-b
+		// 		log.Printf("[Call] ANSWER loopback-b uuid=%s other_leg(a)=%s", uuid, otherLeg)
+		// 	} else {
+		// 		log.Printf("[Call] ANSWER loopback-b uuid=%s (Other-Leg empty)", uuid)
+		// 	}
+		// }
 		log.Printf("[Call] ANSWER loopback tracked uuid=%s channel=%s", uuid, channelName)
 		return
 	}
@@ -260,7 +260,7 @@ func handleAnswer(ev *eventsocket.Event) {
 				sess.RelayConn.Close()
 			}
 			esl.StopRecording(uuid, recordPath)
-			esl.StopRecording(uuid, fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid))
+			// esl.StopRecording(uuid, fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid))
 			os.Remove(recordPath)
 			os.Remove(ttsPath)
 			for _, c := range campaigns.List() {
@@ -306,34 +306,33 @@ func handleAnswer(ev *eventsocket.Event) {
 			return
 		}
 	}
-	// Send the recording UUID (loopback-b) to the relay for Kafka.
-	// FreeSWITCH records on loopback-b; try loopbackBUUIDs map first, then ESL API query.
-	var recordingUUID string
-	originateUUID := pd.CallUUID
-	if originateUUID != "" {
-		if v, ok := loopbackBUUIDs.LoadAndDelete(originateUUID); ok {
-			recordingUUID = v.(string)
-		}
-		if recordingUUID == "" {
-			// Fallback: query FreeSWITCH for loopback-b UUID via ESL API
-			resp, err := esl.SendAPI(fmt.Sprintf("uuid_getvar %s other_loopback_leg_uuid", originateUUID))
-			if err == nil {
-				r := strings.TrimSpace(resp)
-				if r != "" && !strings.HasPrefix(r, "-ERR") {
-					recordingUUID = r
-				}
-			}
-		}
-	}
-	log.Printf("[Call] sip_uuid=%s originate_uuid=%s recording_uuid=%s", uuid, originateUUID, recordingUUID)
-	if recordingUUID != "" {
-		// Use loopback-b for playback so that record_session on loopback-b captures bot voice.
-		// Broadcasting on sofia causes loopback-b to hear hold music instead of TTS.
-		sess.PlaybackUUID = recordingUUID
-		if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: recordingUUID}); err != nil {
-			log.Printf("[Call] relay set_sip_uuid failed: %v", err)
-		}
-	}
+	// // [COMMENTED OUT] Loopback-b UUID tracking for recording — disabled to simplify flow
+	// // Send the recording UUID (loopback-b) to the relay for Kafka.
+	// // FreeSWITCH records on loopback-b; try loopbackBUUIDs map first, then ESL API query.
+	// var recordingUUID string
+	// originateUUID := pd.CallUUID
+	// if originateUUID != "" {
+	// 	if v, ok := loopbackBUUIDs.LoadAndDelete(originateUUID); ok {
+	// 		recordingUUID = v.(string)
+	// 	}
+	// 	if recordingUUID == "" {
+	// 		// Fallback: query FreeSWITCH for loopback-b UUID via ESL API
+	// 		resp, err := esl.SendAPI(fmt.Sprintf("uuid_getvar %s other_loopback_leg_uuid", originateUUID))
+	// 		if err == nil {
+	// 			r := strings.TrimSpace(resp)
+	// 			if r != "" && !strings.HasPrefix(r, "-ERR") {
+	// 				recordingUUID = r
+	// 			}
+	// 		}
+	// 	}
+	// }
+	// log.Printf("[Call] sip_uuid=%s originate_uuid=%s recording_uuid=%s", uuid, originateUUID, recordingUUID)
+	// if recordingUUID != "" {
+	// 	sess.PlaybackUUID = recordingUUID
+	// 	if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: recordingUUID}); err != nil {
+	// 		log.Printf("[Call] relay set_sip_uuid failed: %v", err)
+	// 	}
+	// }
 	// Signal the relay that the call was answered — triggers response.create
 	if err := relayClient.SendControl(relay.ControlMsg{Type: "go"}); err != nil {
 		log.Printf("[Call] relay go signal failed uuid=%s: %v", uuid, err)
@@ -532,15 +531,15 @@ func handleAnswer(ev *eventsocket.Event) {
 		log.Printf("[Call] StartRecording: %v", err)
 	}
 
-	// Stereo recording on SIP leg: captures both user voice (read) and bot TTS (write).
-	// The dialplan's record_session on loopback-b misses bot voice because uuid_broadcast
-	// on sofia breaks the bridge. This separate recording on sofia captures everything.
-	stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
-	if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
-		log.Printf("[Call] StartStereoRecording: %v", err)
-	} else {
-		log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
-	}
+	// // [COMMENTED OUT] Stereo recording on SIP leg — disabled to avoid duplicate recordings
+	// // The dialplan's record_session on loopback-b misses bot voice because uuid_broadcast
+	// // on sofia breaks the bridge. This separate recording on sofia captures everything.
+	// stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
+	// if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
+	// 	log.Printf("[Call] StartStereoRecording: %v", err)
+	// } else {
+	// 	log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
+	// }
 
 	// Silence timeout: if no user/bot activity for SILENCE_TIMEOUT seconds,
 	// force-end the call. Handles cases where user hangs up but SIP provider
