@@ -19,14 +19,12 @@ func (es *EventSocket) StartWAVRecording(uuid, filename string) error {
 	return err
 }
 
-// // [COMMENTED OUT] StartStereoRecording — disabled along with stereo recording in main.go
-// func (es *EventSocket) StartStereoRecording(uuid, filename string) error {
-// 	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only false", uuid))
-// 	es.SendAPI(fmt.Sprintf("uuid_setvar %s RECORD_STEREO true", uuid))
-// 	es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
-// 	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s start %s", uuid, filename))
-// 	return err
-// }
+func (es *EventSocket) StartStereoRecording(uuid, filename string) error {
+	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only false", uuid))
+	es.SendAPI(fmt.Sprintf("uuid_setvar %s RECORD_STEREO true", uuid))
+	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s start %s", uuid, filename))
+	return err
+}
 
 func (es *EventSocket) StopRecording(uuid, filename string) error {
 	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s stop %s", uuid, filename))

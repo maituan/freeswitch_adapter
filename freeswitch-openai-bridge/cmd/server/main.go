@@ -260,7 +260,7 @@ func handleAnswer(ev *eventsocket.Event) {
 				sess.RelayConn.Close()
 			}
 			esl.StopRecording(uuid, recordPath)
-			// esl.StopRecording(uuid, fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid))
+			esl.StopRecording(uuid, fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid))
 			os.Remove(recordPath)
 			os.Remove(ttsPath)
 			for _, c := range campaigns.List() {
@@ -535,15 +535,15 @@ func handleAnswer(ev *eventsocket.Event) {
 		log.Printf("[Call] StartRecording: %v", err)
 	}
 
-	// // [COMMENTED OUT] Stereo recording on SIP leg — disabled to avoid duplicate recordings
-	// // The dialplan's record_session on loopback-b misses bot voice because uuid_broadcast
-	// // on sofia breaks the bridge. This separate recording on sofia captures everything.
-	// stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
-	// if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
-	// 	log.Printf("[Call] StartStereoRecording: %v", err)
-	// } else {
-	// 	log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
-	// }
+	// Stereo recording: capture both user + bot into MP3 (non-blocking)
+	go func() {
+		stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
+		if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
+			log.Printf("[Call] StartStereoRecording: %v", err)
+		} else {
+			log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
+		}
+	}()
 
 	// Silence timeout: if no user/bot activity for SILENCE_TIMEOUT seconds,
 	// force-end the call. Handles cases where user hangs up but SIP provider
