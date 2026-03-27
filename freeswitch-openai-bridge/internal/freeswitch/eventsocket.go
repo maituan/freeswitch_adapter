@@ -195,22 +195,83 @@ func (es *EventSocket) SendAPI(command string) (string, error) {
 	defer es.apiMu.Unlock()
 
 	log.Printf("[ESL] api >> %s", command)
-	ev, err := c.Send(fmt.Sprintf("api %s", command))
-	if err != nil {
-		log.Printf("[ESL] api << ERROR: %v", err)
-		return "", fmt.Errorf("api %s: %w", command, err)
-	}
 
-	var result string
-	if ev != nil {
-		result = ev.Body
+	type sendResult struct {
+		ev  *eventsocket.Event
+		err error
 	}
-	log.Printf("[ESL] api << %s", result)
-	return result, nil
+	done := make(chan sendResult, 1)
+	go func() {
+		ev, err := c.Send(fmt.Sprintf("api %s", command))
+		done <- sendResult{ev, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			log.Printf("[ESL] api << ERROR: %v", r.err)
+			return "", fmt.Errorf("api %s: %w", command, r.err)
+		}
+		var result string
+		if r.ev != nil {
+			result = r.ev.Body
+		}
+		log.Printf("[ESL] api << %s", result)
+		return result, nil
+
+	case <-time.After(5 * time.Second):
+		log.Printf("[ESL] api << TIMEOUT (5s) command=%s — closing apiConn to recover", command)
+		c.Close()
+		es.mu.Lock()
+		es.apiConn = nil
+		es.mu.Unlock()
+		// Trigger reconnect in background
+		go es.reconnectAPI()
+		return "", fmt.Errorf("api timeout: %s", command)
+	}
+}
+
+// reconnectAPI creates a new API connection in the background.
+// Called when SendAPI detects a timeout and closes the old connection.
+func (es *EventSocket) reconnectAPI() {
+	log.Printf("[ESL] Reconnecting API channel to %s...", es.config.Host)
+	conn, err := eventsocket.Dial(es.config.Host, es.config.Password)
+	if err != nil {
+		log.Printf("[ESL] API reconnect failed: %v", err)
+		return
+	}
+	es.mu.Lock()
+	if es.apiConn != nil {
+		// Another goroutine already reconnected
+		conn.Close()
+	} else {
+		es.apiConn = conn
+		log.Printf("[ESL] API channel reconnected")
+	}
+	es.mu.Unlock()
+}
+
+// reconnectOrig creates a new originate connection in the background.
+func (es *EventSocket) reconnectOrig() {
+	log.Printf("[ESL] Reconnecting originate channel to %s...", es.config.Host)
+	conn, err := eventsocket.Dial(es.config.Host, es.config.Password)
+	if err != nil {
+		log.Printf("[ESL] Originate reconnect failed: %v", err)
+		return
+	}
+	es.mu.Lock()
+	if es.origConn != nil {
+		conn.Close()
+	} else {
+		es.origConn = conn
+		log.Printf("[ESL] Originate channel reconnected")
+	}
+	es.mu.Unlock()
 }
 
 // SendOriginate sends an originate command on its own dedicated connection.
 // Uses origMu (not apiMu) so it never blocks short commands like uuid_broadcast.
+// Timeout 30s (originate waits for callee to answer).
 func (es *EventSocket) SendOriginate(command string) (string, error) {
 	es.mu.Lock()
 	c := es.origConn
@@ -224,18 +285,39 @@ func (es *EventSocket) SendOriginate(command string) (string, error) {
 	defer es.origMu.Unlock()
 
 	log.Printf("[ESL] orig >> %s", command)
-	ev, err := c.Send(fmt.Sprintf("api %s", command))
-	if err != nil {
-		log.Printf("[ESL] orig << ERROR: %v", err)
-		return "", fmt.Errorf("originate: %w", err)
-	}
 
-	var result string
-	if ev != nil {
-		result = ev.Body
+	type sendResult struct {
+		ev  *eventsocket.Event
+		err error
 	}
-	log.Printf("[ESL] orig << %s", result)
-	return result, nil
+	done := make(chan sendResult, 1)
+	go func() {
+		ev, err := c.Send(fmt.Sprintf("api %s", command))
+		done <- sendResult{ev, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			log.Printf("[ESL] orig << ERROR: %v", r.err)
+			return "", fmt.Errorf("originate: %w", r.err)
+		}
+		var result string
+		if r.ev != nil {
+			result = r.ev.Body
+		}
+		log.Printf("[ESL] orig << %s", result)
+		return result, nil
+
+	case <-time.After(30 * time.Second):
+		log.Printf("[ESL] orig << TIMEOUT (30s) — closing origConn to recover")
+		c.Close()
+		es.mu.Lock()
+		es.origConn = nil
+		es.mu.Unlock()
+		go es.reconnectOrig()
+		return "", fmt.Errorf("originate timeout")
+	}
 }
 
 func (es *EventSocket) SendBgAPI(command string) (string, error) {
