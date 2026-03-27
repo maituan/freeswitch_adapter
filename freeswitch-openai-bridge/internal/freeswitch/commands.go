@@ -7,9 +7,9 @@ import (
 
 func (es *EventSocket) StartRecording(uuid, filename string) error {
 	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_read_only true", uuid))
-	// es.SendAPI(fmt.Sprintf("uuid_setvar %s record_stereo false", uuid))
-	// es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
-	// es.SendAPI(fmt.Sprintf("uuid_setvar %s timer_name soft", uuid))
+	es.SendAPI(fmt.Sprintf("uuid_setvar %s record_stereo false", uuid))
+	es.SendAPI(fmt.Sprintf("uuid_setvar %s enable_file_write_buffering false", uuid))
+	es.SendAPI(fmt.Sprintf("uuid_setvar %s timer_name soft", uuid))
 	_, err := es.SendAPI(fmt.Sprintf("uuid_record %s start %s 8000 1", uuid, filename))
 	return err
 }
