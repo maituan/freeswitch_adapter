@@ -559,21 +559,41 @@ func handleAnswer(ev *eventsocket.Event) {
 
 		buf := make([]byte, 320) // 20ms at 8kHz PCM16
 		var audioChunks int64
+		var wasBotSpeaking bool
+		var drainUntil time.Time
 		for {
 			if sess.GetStatus() != "active" {
 				return
 			}
 			n, err := f.Read(buf)
 			if n > 0 {
-				// Mute audio while bot is speaking: prevents stale audio
-				// from accumulating in relay buffer and being dumped to ASR
-				// after playback_stop, which causes delayed/wrong finals.
-				if sess.IsBotSpeaking() {
+				botNow := sess.IsBotSpeaking()
+
+				// Mute while bot speaks
+				if botNow {
+					wasBotSpeaking = true
 					if err != nil {
 						break
 					}
 					continue
 				}
+
+				// Drain stale audio burst after bot stops speaking.
+				// FS flushes buffered audio from loopback after PLAYBACK_STOP;
+				// this burst contains user speech from during bot playback.
+				// Discard audio for 500ms after transition to let the burst pass.
+				if wasBotSpeaking {
+					wasBotSpeaking = false
+					drainUntil = time.Now().Add(500 * time.Millisecond)
+					log.Printf("[AudioIn] draining stale audio for 500ms after bot stop uuid=%s", uuid)
+				}
+				if time.Now().Before(drainUntil) {
+					if err != nil {
+						break
+					}
+					continue
+				}
+
 				chunk := make([]byte, n)
 				copy(chunk, buf[:n])
 				if sendErr := relayClient.SendAudio(chunk); sendErr != nil {
