@@ -561,12 +561,29 @@ func handleAnswer(ev *eventsocket.Event) {
 		var audioChunks int64
 		var wasBotSpeaking bool
 		var drainUntil time.Time
+		var lastReadTime time.Time
+		var burstChunks int64 // counts consecutive reads < 2ms apart
 		for {
 			if sess.GetStatus() != "active" {
 				return
 			}
 			n, err := f.Read(buf)
 			if n > 0 {
+				now := time.Now()
+				if !lastReadTime.IsZero() {
+					gap := now.Sub(lastReadTime)
+					if gap < 2*time.Millisecond {
+						burstChunks++
+					} else {
+						if burstChunks > 5 {
+							log.Printf("[AudioIn] BURST detected: %d chunks in <2ms each (last gap=%v) uuid=%s",
+								burstChunks, gap, uuid)
+						}
+						burstChunks = 0
+					}
+				}
+				lastReadTime = now
+
 				botNow := sess.IsBotSpeaking()
 
 				// Mute while bot speaks
