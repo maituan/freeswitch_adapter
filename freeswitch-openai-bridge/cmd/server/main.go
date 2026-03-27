@@ -274,7 +274,6 @@ func handleAnswer(ev *eventsocket.Event) {
 				sess.RelayConn.Close()
 			}
 			esl.StopRecording(uuid, recordPath)
-			esl.StopRecording(uuid, fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid))
 			os.Remove(recordPath)
 			os.Remove(ttsPath)
 			for _, c := range campaigns.List() {
@@ -545,15 +544,10 @@ func handleAnswer(ev *eventsocket.Event) {
 		}
 	}()
 
-	// Start stereo FIRST (sets record_read_only=false, RECORD_STEREO=true),
-	// then FIFO recording (sets record_read_only=true LAST so FIFO only captures user voice).
-	stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
-	if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
-		log.Printf("[Call] StartStereoRecording: %v", err)
-	} else {
-		log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
-	}
-
+	// FIFO recording: read-only (user voice only) for ASR.
+	// Stereo recording is handled by the dialplan's record_session on the sofia channel.
+	// Cannot use both uuid_record with different record_read_only on the same channel
+	// because record_read_only is a channel-level variable.
 	if err := esl.StartRecording(uuid, recordPath); err != nil {
 		log.Printf("[Call] StartRecording: %v", err)
 	}
