@@ -379,7 +379,7 @@ func handleAnswer(ev *eventsocket.Event) {
 				return fmt.Errorf("PlayAudio: %w", err)
 			}
 			var err error
-			f, err = os.OpenFile(ttsPath, os.O_RDWR, 0666)
+			f, err = os.OpenFile(ttsPath, os.O_WRONLY, 0666)
 			if err != nil {
 				return fmt.Errorf("open fifo: %w", err)
 			}
@@ -545,19 +545,18 @@ func handleAnswer(ev *eventsocket.Event) {
 		}
 	}()
 
+	// Start stereo FIRST (sets record_read_only=false, RECORD_STEREO=true),
+	// then FIFO recording (sets record_read_only=true LAST so FIFO only captures user voice).
+	stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
+	if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
+		log.Printf("[Call] StartStereoRecording: %v", err)
+	} else {
+		log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
+	}
+
 	if err := esl.StartRecording(uuid, recordPath); err != nil {
 		log.Printf("[Call] StartRecording: %v", err)
 	}
-
-	// Stereo recording: capture both user + bot into MP3 (non-blocking)
-	go func() {
-		stereoRecordPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", uuid)
-		if err := esl.StartStereoRecording(uuid, stereoRecordPath); err != nil {
-			log.Printf("[Call] StartStereoRecording: %v", err)
-		} else {
-			log.Printf("[Call] stereo recording started uuid=%s path=%s", uuid, stereoRecordPath)
-		}
-	}()
 
 	// Silence timeout: if no user/bot activity for SILENCE_TIMEOUT seconds,
 	// force-end the call. Handles cases where user hangs up but SIP provider
