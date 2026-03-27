@@ -3,6 +3,10 @@ import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import { EventEmitter } from 'events';
 
+function ts(): string {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '');
+}
+
 const PROTO_PATH = path.join(process.cwd(), 'src/app/lib/protos/streaming_voice.proto');
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
@@ -74,22 +78,22 @@ export class AsrClient extends EventEmitter {
         this.emit('data', result);
         
         if (response.result.final) {
-            console.log(`[ASR Client] Final: ${hypothesis.transcript}`);
+            console.log(`${ts()} [ASR Client] Final: ${hypothesis.transcript}`);
         }
       } else if (response.status !== 0) {
-          console.error(`[ASR Client] Error status: ${response.status}, msg: ${response.msg}`);
+          console.error(`${ts()} [ASR Client] Error status: ${response.status}, msg: ${response.msg}`);
           this.emit('error', new Error(response.msg));
       }
     });
 
     this.call.on('end', () => {
-      console.log('[ASR Client] Stream ended');
+      console.log(`${ts()} [ASR Client] Stream ended`);
       this.isConnected = false;
       this.emit('end');
     });
 
     this.call.on('error', (error: Error) => {
-      console.error('[ASR Client] Stream error:', error);
+      console.error(`${ts()} [ASR Client] Stream error:`, error);
       this.isConnected = false;
       this.emit('error', error);
     });
