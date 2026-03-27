@@ -565,8 +565,15 @@ func handleAnswer(ev *eventsocket.Event) {
 			}
 			n, err := f.Read(buf)
 			if n > 0 {
-				// Copy before send: buf is reused each iteration; channel may delay write.
-				// Sending buf[:n] causes relay to receive overwritten/corrupted data.
+				// Mute audio while bot is speaking: prevents stale audio
+				// from accumulating in relay buffer and being dumped to ASR
+				// after playback_stop, which causes delayed/wrong finals.
+				if sess.IsBotSpeaking() {
+					if err != nil {
+						break
+					}
+					continue
+				}
 				chunk := make([]byte, n)
 				copy(chunk, buf[:n])
 				if sendErr := relayClient.SendAudio(chunk); sendErr != nil {
