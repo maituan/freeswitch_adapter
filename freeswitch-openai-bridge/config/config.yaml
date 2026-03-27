@@ -14,3 +14,7 @@ relay:
 audio:
   record_path: "/dev/shm/bridge/recordings"
   tts_path: "/dev/shm/bridge/tts"
+
+filler:
+  enabled: false  # env: FILLER_ENABLED=true
+  path: "/opt/filler"  # env: FILLER_PATH — expects {path}/{voiceId}/*.wav

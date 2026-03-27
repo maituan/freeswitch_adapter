@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,7 @@ type Config struct {
 	FreeSWITCH FreeSWITCHConfig `yaml:"freeswitch"`
 	Relay      RelayConfig      `yaml:"relay"`
 	Audio      AudioConfig      `yaml:"audio"`
+	Filler     FillerConfig     `yaml:"filler"`
 }
 
 type ServerConfig struct {
@@ -38,20 +40,33 @@ type AudioConfig struct {
 	TTSPath    string `yaml:"tts_path"`
 }
 
+type FillerConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Path    string `yaml:"path"`
+}
+
 func Load() (*Config, error) {
+	// Defaults
+	cfg := Config{
+		Server:     ServerConfig{Port: 8083},
+		FreeSWITCH: FreeSWITCHConfig{Host: "127.0.0.1:8021", Password: "ClueCon"},
+		Relay:      RelayConfig{URL: "ws://localhost:8091", AudioSampleRate: 8000},
+		Audio:      AudioConfig{RecordPath: "/dev/shm/bridge/recordings", TTSPath: "/dev/shm/bridge/tts"},
+		Filler:     FillerConfig{Path: "/opt/filler"},
+	}
+
+	// Optional YAML — override defaults if file exists
 	_, filename, _, _ := runtime.Caller(0)
 	configPath := filepath.Join(filepath.Dir(filename), "config.yaml")
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+	if data, err := os.ReadFile(configPath); err == nil {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("parse config: %w", err)
+		}
+	} else {
+		log.Printf("[Config] config.yaml not found, using defaults + env vars")
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-
+	// Environment variables override everything
 	if v := os.Getenv("FS_HOST"); v != "" {
 		cfg.FreeSWITCH.Host = v
 	}
@@ -72,6 +87,12 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("TTS_VOICES_URL"); v != "" {
 		cfg.Relay.TTSVoicesURL = v
+	}
+	if v := os.Getenv("FILLER_ENABLED"); v == "true" || v == "1" {
+		cfg.Filler.Enabled = true
+	}
+	if v := os.Getenv("FILLER_PATH"); v != "" {
+		cfg.Filler.Path = v
 	}
 
 	return &cfg, nil

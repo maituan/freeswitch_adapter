@@ -8,8 +8,10 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -363,6 +365,39 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	needResample := cfg.Relay.AudioSampleRate == 24000
 
+	// Filler word support: play a short WAV while waiting for TTS response.
+	var fillerFiles []string
+	var fillerPlaying int32 // atomic: 1 = filler playing
+	if cfg.Filler.Enabled {
+		fillerFiles = discoverFillers(cfg.Filler.Path, pd.VoiceID)
+		if len(fillerFiles) > 0 {
+			log.Printf("[Filler] discovered %d filler files for voice=%s uuid=%s", len(fillerFiles), pd.VoiceID, uuid)
+		}
+	}
+	fillerChan := make(chan struct{}, 1) // signal to play filler
+
+	playFiller := func() {
+		if len(fillerFiles) == 0 {
+			return
+		}
+		f := pickRandomFiller(fillerFiles)
+		log.Printf("[Filler] playing %s uuid=%s", filepath.Base(f), uuid)
+		if err := esl.PlayAudio(uuid, f); err != nil {
+			log.Printf("[Filler] PlayAudio error: %v uuid=%s", err, uuid)
+			return
+		}
+		fillerPlaying = 1 // single goroutine access, no atomic needed
+	}
+
+	stopFiller := func() {
+		if fillerPlaying == 0 {
+			return
+		}
+		log.Printf("[Filler] stopping filler uuid=%s", uuid)
+		esl.StopPlayback(uuid)
+		fillerPlaying = 0
+	}
+
 	// FIFO writer goroutine: lazily opens/closes FIFO per utterance
 	go func() {
 		var f *os.File
@@ -373,6 +408,8 @@ func handleAnswer(ev *eventsocket.Event) {
 			if fifoOpen {
 				return nil
 			}
+			// Stop filler if playing before starting TTS
+			stopFiller()
 			log.Printf("[AudioOut] Starting new utterance uuid=%s", uuid)
 			if err := esl.PlayAudio(uuid, ttsPath); err != nil {
 				return fmt.Errorf("PlayAudio: %w", err)
@@ -401,39 +438,43 @@ func handleAnswer(ev *eventsocket.Event) {
 
 		defer closeFIFO()
 
-		for pcm := range audioChan {
-			if pcm == nil {
-				closeFIFO()
-				// Nếu bot đã ra lệnh ENDCALL, chỉ cúp máy sau khi FIFO
-				// đóng (tức FreeSWITCH đã đọc xong audio cuối), giống
-				// logic pending_hangup của backend cũ. Thêm một khoảng
-				// trễ nhỏ để đảm bảo jitter buffer/playback của
-				// FreeSWITCH/PSTN đã xả hết audio.
-				if sess.GetStatus() == "pending_hangup" {
-					// Don't kill here — wait for PLAYBACK_STOP from FreeSWITCH
-					// so the caller hears the full audio before the call ends.
-					// handlePlaybackStop will call uuid_kill when playback is done.
-					log.Printf("[AudioOut] FIFO closed with pending_hangup, waiting for PLAYBACK_STOP uuid=%s", uuid)
+		for {
+			select {
+			case pcm, ok := <-audioChan:
+				if !ok {
+					return // channel closed
 				}
-				continue
-			}
-
-			if err := openFIFO(); err != nil {
-				log.Printf("[AudioOut] %v uuid=%s", err, uuid)
-				continue
-			}
-
-			chunkIdx++
-			if _, err := f.Write(pcm); err != nil {
-				if strings.Contains(err.Error(), "broken pipe") {
-					log.Printf("[AudioOut] FIFO broken pipe uuid=%s", uuid)
+				if pcm == nil {
 					closeFIFO()
-					doCleanup("fifo-broken-pipe")
-					return
+					if sess.GetStatus() == "pending_hangup" {
+						log.Printf("[AudioOut] FIFO closed with pending_hangup, waiting for PLAYBACK_STOP uuid=%s", uuid)
+					}
+					continue
 				}
-				log.Printf("[AudioOut] write error uuid=%s: %v", uuid, err)
-				closeFIFO()
-				continue
+
+				if err := openFIFO(); err != nil {
+					log.Printf("[AudioOut] %v uuid=%s", err, uuid)
+					continue
+				}
+
+				chunkIdx++
+				if _, err := f.Write(pcm); err != nil {
+					if strings.Contains(err.Error(), "broken pipe") {
+						log.Printf("[AudioOut] FIFO broken pipe uuid=%s", uuid)
+						closeFIFO()
+						doCleanup("fifo-broken-pipe")
+						return
+					}
+					log.Printf("[AudioOut] write error uuid=%s: %v", uuid, err)
+					closeFIFO()
+					continue
+				}
+
+			case <-fillerChan:
+				// Only play filler if no TTS is active
+				if !fifoOpen {
+					playFiller()
+				}
 			}
 		}
 	}()
@@ -480,6 +521,13 @@ func handleAnswer(ev *eventsocket.Event) {
 					if msg.EventName == "send_message" {
 						// User spoke — refresh activity
 						sess.TouchActivity()
+						// Signal filler word (non-blocking)
+						if len(fillerFiles) > 0 {
+							select {
+							case fillerChan <- struct{}{}:
+							default:
+							}
+						}
 					}
 				case "command":
 					switch msg.Action {
@@ -902,6 +950,43 @@ func genUUID() string {
 	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// discoverFillers returns WAV file paths under {basePath}/{voiceId}/.
+// Returns nil if directory doesn't exist or has no WAV files.
+func discoverFillers(basePath, voiceId string) []string {
+	if basePath == "" || voiceId == "" {
+		return nil
+	}
+	dir := filepath.Join(basePath, voiceId)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := strings.ToLower(e.Name())
+		if strings.HasSuffix(name, ".wav") || strings.HasSuffix(name, ".mp3") {
+			files = append(files, filepath.Join(dir, e.Name()))
+		}
+	}
+	return files
+}
+
+// pickRandomFiller returns a random filler file from the list.
+func pickRandomFiller(files []string) string {
+	if len(files) == 0 {
+		return ""
+	}
+	if len(files) == 1 {
+		return files[0]
+	}
+	n, _ := big.NewInt(0).SetString(fmt.Sprintf("%d", len(files)), 10)
+	idx, _ := rand.Int(rand.Reader, n)
+	return files[idx.Int64()]
 }
 
 // phoneKey extracts the last 9 digits from a phone number for matching.
