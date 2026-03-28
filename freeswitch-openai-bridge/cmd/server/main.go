@@ -408,8 +408,11 @@ func handleAnswer(ev *eventsocket.Event) {
 			if fifoOpen {
 				return nil
 			}
-			// Stop filler if playing before starting TTS
-			stopFiller()
+			// No need to call stopFiller() here — uuid_broadcast below
+			// will automatically stop any current playback (filler or otherwise).
+			// Calling uuid_break before uuid_broadcast causes spurious
+			// PLAYBACK_STOP events that create audio glitches ("xoẹt").
+			fillerPlaying = 0
 
 			// Fresh FIFO for each utterance — never reuse
 			uttIdx++
