@@ -827,6 +827,8 @@ export class CallSession {
       ...(report ? { report } : {}),
     }
 
+    // Delay 2s to ensure FS has finished writing the recording file
+    await new Promise(resolve => setTimeout(resolve, 2000))
     await sendCallHistory(callId, payload)
   }
 }

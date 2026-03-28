@@ -11,6 +11,7 @@ type CallSession struct {
 	UUID         string
 	Phone        string
 	Status       string
+	CallID       string    // primary call ID (originate UUID) — used for recording filename
 	PlaybackUUID string    // loopback-b UUID — use for uuid_broadcast so recording captures bot voice
 	StartTime    time.Time
 	LastActivity time.Time // last user speech or bot activity

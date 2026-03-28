@@ -243,6 +243,7 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	// Create session
 	sess := sessions.Create(uuid, phone)
+	sess.CallID = callID
 
 	// FIFO paths
 	recordPath := fmt.Sprintf("%s/%s.raw", cfg.Audio.RecordPath, uuid)
@@ -724,6 +725,11 @@ func handlePlaybackStop(ev *eventsocket.Event) {
 	// in the FIFO writer which was too early (FIFO EOF ≠ playback complete).
 	if sess.GetStatus() == "pending_hangup" {
 		log.Printf("[Call] PLAYBACK_STOP with pending_hangup, ending call uuid=%s", uuid)
+		// Stop stereo recording before killing channel (session still alive here)
+		if sess.CallID != "" {
+			stereoPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", sess.CallID)
+			esl.StopRecording(uuid, stereoPath)
+		}
 		esl.EndCall(uuid)
 	}
 }
