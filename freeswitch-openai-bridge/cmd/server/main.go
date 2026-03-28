@@ -364,7 +364,6 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	// Filler word support: play a short WAV while waiting for TTS response.
 	var fillerFiles []string
-	var fillerPlaying int32 // atomic: 1 = filler playing
 	if cfg.Filler.Enabled {
 		fillerFiles = discoverFillers(cfg.Filler.Path, pd.VoiceID)
 		if len(fillerFiles) > 0 {
@@ -383,16 +382,6 @@ func handleAnswer(ev *eventsocket.Event) {
 			log.Printf("[Filler] PlayAudio error: %v uuid=%s", err, uuid)
 			return
 		}
-		fillerPlaying = 1 // single goroutine access, no atomic needed
-	}
-
-	stopFiller := func() {
-		if fillerPlaying == 0 {
-			return
-		}
-		log.Printf("[Filler] stopping filler uuid=%s", uuid)
-		esl.StopPlayback(uuid)
-		fillerPlaying = 0
 	}
 
 	// FIFO writer goroutine: creates a fresh FIFO per utterance to avoid
@@ -408,11 +397,10 @@ func handleAnswer(ev *eventsocket.Event) {
 			if fifoOpen {
 				return nil
 			}
-			// No need to call stopFiller() here — uuid_broadcast below
+			// No need to stop filler here — uuid_broadcast below
 			// will automatically stop any current playback (filler or otherwise).
 			// Calling uuid_break before uuid_broadcast causes spurious
-			// PLAYBACK_STOP events that create audio glitches ("xoẹt").
-			fillerPlaying = 0
+			// PLAYBACK_STOP events that create audio glitches.
 
 			// Fresh FIFO for each utterance — never reuse
 			uttIdx++
