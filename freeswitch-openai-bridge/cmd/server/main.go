@@ -246,7 +246,6 @@ func handleAnswer(ev *eventsocket.Event) {
 
 	// FIFO paths
 	recordPath := fmt.Sprintf("%s/%s.raw", cfg.Audio.RecordPath, uuid)
-	ttsPath := fmt.Sprintf("%s/%s.raw", cfg.Audio.TTSPath, uuid)
 
 	if err := os.MkdirAll(cfg.Audio.RecordPath, 0755); err != nil {
 		log.Printf("[Call] mkdir recordings: %v", err)
@@ -258,10 +257,6 @@ func handleAnswer(ev *eventsocket.Event) {
 	}
 	if err := makeFIFO(recordPath); err != nil {
 		log.Printf("[Call] mkfifo recording: %v", err)
-		return
-	}
-	if err := makeFIFO(ttsPath); err != nil {
-		log.Printf("[Call] mkfifo tts: %v", err)
 		return
 	}
 
@@ -277,7 +272,6 @@ func handleAnswer(ev *eventsocket.Event) {
 			}
 			esl.StopRecording(uuid, recordPath)
 			os.Remove(recordPath)
-			os.Remove(ttsPath)
 			for _, c := range campaigns.List() {
 				c.UpdateLeadStatus(uuid, campaign.StatusCompleted)
 			}
@@ -398,11 +392,14 @@ func handleAnswer(ev *eventsocket.Event) {
 		fillerPlaying = 0
 	}
 
-	// FIFO writer goroutine: lazily opens/closes FIFO per utterance
+	// FIFO writer goroutine: creates a fresh FIFO per utterance to avoid
+	// state conflict when FS hasn't fully cleaned up the previous reader.
 	go func() {
 		var f *os.File
 		var fifoOpen bool
 		var chunkIdx int
+		var uttIdx int
+		var curFIFO string
 
 		openFIFO := func() error {
 			if fifoOpen {
@@ -410,13 +407,23 @@ func handleAnswer(ev *eventsocket.Event) {
 			}
 			// Stop filler if playing before starting TTS
 			stopFiller()
-			log.Printf("[AudioOut] Starting new utterance uuid=%s", uuid)
-			if err := esl.PlayAudio(uuid, ttsPath); err != nil {
+
+			// Fresh FIFO for each utterance — never reuse
+			uttIdx++
+			curFIFO = fmt.Sprintf("%s/%s-%d.raw", cfg.Audio.TTSPath, uuid, uttIdx)
+			if err := makeFIFO(curFIFO); err != nil {
+				return fmt.Errorf("mkfifo: %w", err)
+			}
+
+			log.Printf("[AudioOut] Starting utterance #%d uuid=%s", uttIdx, uuid)
+			if err := esl.PlayAudio(uuid, curFIFO); err != nil {
+				os.Remove(curFIFO)
 				return fmt.Errorf("PlayAudio: %w", err)
 			}
 			var err error
-			f, err = os.OpenFile(ttsPath, os.O_WRONLY, 0666)
+			f, err = os.OpenFile(curFIFO, os.O_WRONLY, 0666)
 			if err != nil {
+				os.Remove(curFIFO)
 				return fmt.Errorf("open fifo: %w", err)
 			}
 			fifoOpen = true
@@ -434,6 +441,10 @@ func handleAnswer(ev *eventsocket.Event) {
 				log.Printf("[AudioOut] FIFO closed (end of utterance) uuid=%s chunks=%d", uuid, chunkIdx)
 			}
 			fifoOpen = false
+			if curFIFO != "" {
+				os.Remove(curFIFO)
+				curFIFO = ""
+			}
 		}
 
 		defer closeFIFO()
