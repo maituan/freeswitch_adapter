@@ -343,7 +343,14 @@ func handleAnswer(ev *eventsocket.Event) {
 	// 	}
 	// }
 	// Send recording_uuid to relay for Kafka (now same as SIP leg UUID)
-	if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: uuid}); err != nil {
+	// recording_uuid = loopback-b UUID (FS record_session runs on loopback-b,
+	// so the file is named with loopback-b UUID). Fall back to sofia UUID.
+	recordingUUID := otherLeg
+	if recordingUUID == "" {
+		recordingUUID = uuid
+	}
+	log.Printf("[Call] recording_uuid=%s (otherLeg=%s, sofia=%s) uuid=%s", recordingUUID, otherLeg, uuid, callID)
+	if err := relayClient.SendControl(relay.ControlMsg{Type: "set_sip_uuid", Message: recordingUUID}); err != nil {
 		log.Printf("[Call] relay set_sip_uuid failed: %v", err)
 	}
 	// Signal the relay that the call was answered — triggers response.create
