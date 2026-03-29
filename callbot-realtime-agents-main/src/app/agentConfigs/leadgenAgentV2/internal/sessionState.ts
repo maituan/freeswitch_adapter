@@ -156,8 +156,8 @@ function applyRuntimeOverrides(
     phoneNumber: context.phoneNumber ?? state.phoneNumber,
     slots: {
       ...state.slots,
-      leadGender: context.overrideGender ?? state.slots.leadGender,
-      leadName: context.overrideName ?? state.slots.leadName,
+      leadGender: state.slots.leadGender ?? context.overrideGender,
+      leadName: state.slots.leadName ?? context.overrideName,
       plateNumber: context.overridePlate ?? state.slots.plateNumber ?? '29A-12345',
       vehicleType: context.overrideVehicleType ?? state.slots.vehicleType,
       numSeats:

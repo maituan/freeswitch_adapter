@@ -267,6 +267,8 @@ export const updateLeadgenStateTool = tool({
         type: 'object', 
         description: 'Thông tin thu thập được',
         properties: {
+          leadGender: { type: 'string', description: 'Giới tính/xưng hô khách (anh, chị)' },
+          leadName: { type: 'string', description: 'Tên khách hàng' },
           vehicleType: { type: 'string', enum: ['car', 'pickup', 'truck'] },
           numSeats: { type: 'number', description: 'Số chỗ ngồi' },
           isBusiness: { type: 'boolean', description: 'Có kinh doanh không' },
