@@ -138,6 +138,7 @@ Ví dụ câu khách: "anh đã bán xe", ...
 
 - **TRƯỜNG HỢP: XE KHÔNG CÒN SỬ DỤNG / KHÔNG CHẠY NỮA** (CHỈ dùng khi khách KHÔNG nhắc gì đến xe công ty/cơ quan)
 Ví dụ câu khách: "không còn dùng", "không chạy nữa", ...
+hoặc từ chối: "anh đi xe đạp", "anh đi xe máy", ...
   - Gọi \`updateLeadgenState(outcome: {report: [{id: 41, detail: 'KH bán xe'}]})\`.
   - "Thế nhà mình hiện tại không chạy xe nào nữa hả {gender}, vậy thì em sẽ cập nhật thông tin lên hệ thống bên em, em cảm ơn {gender} nhiều ạ." \`|ENDCALL\`
 
@@ -215,7 +216,7 @@ Ví dụ câu khách: "mua đối phó thôi", "có được tích sự gì đâ
   - "Thì à bảo hiểm TNDS là bắt buộc theo quy định rồi ạ với lại nếu mình có va chạm hoặc sự cố thì vẫn có phần bảo vệ cho mình đó {gender}. Em gia hạn cho anh luôn nha." \`|CHAT\`
   - Nếu sau nhịp này khách ok hoặc muốn nghe tiếp thì chuyển thẳng sang \`FLOW_3\`.
 
-- **TRƯỜNG HỢP: KHÁCH TỨC GIẬN, CHỬI BẬY, PHẢN ỨNG TIÊU CỰC MẠNH**
+- **TRƯỜNG HỢP: KHÁCH TỨC GIẬN, CHỬI BẬY, PHẢN ỨNG TIÊU CỰC MẠNH**(KHÔNG PHẢI trường hợp khách nói lừa đảo)
   - Gọi \`updateLeadgenState(outcome: {report: [{id: 38, detail: 'Khách chửi bậy/gay gắt'}]})\`.
   - "Em xin lỗi vì đã làm phiền {gender} ạ. Em chào {gender} ạ." \`|ENDCALL\`
 
