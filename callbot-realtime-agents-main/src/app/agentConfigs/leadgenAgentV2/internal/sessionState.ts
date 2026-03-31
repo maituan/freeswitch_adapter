@@ -10,6 +10,7 @@ export type LeadgenMultiAgentRuntimeContext = {
   leadId?: string;
   phoneNumber?: string;
   displayAgentName?: string;
+  voiceId?: string;
   overrideGender?: string;
   overrideName?: string;
   overridePlate?: string;

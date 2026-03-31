@@ -234,6 +234,31 @@ function buildLeadgenScriptVars(
   };
 }
 
+const VOICE_INTRO_TEMPLATES: Record<string, string> = {
+  'thanh-thao-v2':
+    'Em chào {gender} {name}, em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô ạ. Thì à em thấy chiếc xe {brand} biển số {BKS} sắp hết hạn bảo hiểm vào {expiry_date}, à thì em xin phép gọi để hỗ trợ gia hạn cho mình {gender} {name} nhé.',
+  'ngoc-khanh-v3':
+    'Em chào {gender} {name}, em là {agent_name}, em gọi cho {gender} ở bên Công ty bảo hiểm ô tô ạ. Xe ô tô biển số {BKS} gần đến hạn bảo hiểm rồi, {gender} cho em viết nối hạn và gửi bản giấy về nhà cho {gender} ạ. Hiện tại bên em đang có chương trình chiết khấu và quà tặng cho khách hàng khi mua BH dân sự và BH thân vỏ, em báo giá {gender} tham khảo ạ',
+};
+const DEFAULT_VOICE_ID = 'thanh-thao-v2';
+
+function buildIntroText(sessionId: string, state: LeadgenMultiAgentSessionState): string {
+  const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
+  const voiceId = runtime.voiceId || DEFAULT_VOICE_ID;
+  const template = VOICE_INTRO_TEMPLATES[voiceId] ?? VOICE_INTRO_TEMPLATES[DEFAULT_VOICE_ID];
+  const vars = buildLeadgenScriptVars(sessionId, state);
+
+  return template
+    .replace(/\{gender\}/g, vars.gender)
+    .replace(/\{name\}/g, vars.name)
+    .replace(/\{agent_name\}/g, vars.agent_name)
+    .replace(/\{BKS\}/g, vars.BKS)
+    .replace(/\{brand\}/g, vars.brand)
+    .replace(/\{expiry_date\}/g, vars.expiry_date)
+    .replace(/\{num_seats\}/g, vars.num_seats)
+    .replace(/\{phone_number\}/g, vars.phone_number);
+}
+
 function buildQuoteReplyText(
   sessionId: string,
   state: LeadgenMultiAgentSessionState,
@@ -263,6 +288,7 @@ export const getLeadgenContextTool = tool({
       runtime,
       scriptVars: buildLeadgenScriptVars(sessionId, state),
       pricingContext: buildPricingContext(state),
+      intro_text: buildIntroText(sessionId, state),
     };
   },
 });
