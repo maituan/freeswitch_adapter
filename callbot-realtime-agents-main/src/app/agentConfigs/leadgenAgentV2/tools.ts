@@ -104,15 +104,26 @@ function formatExpiryDateForSpeech(raw?: string): string {
   if (!value) return 'tháng tới';
   if (!value.includes('/')) return value;
 
-  const match = value.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
-  if (!match) return 'tháng tới';
+  const fullDateMatch = value.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (fullDateMatch) {
+    const day = Number(fullDateMatch[1]);
+    const month = Number(fullDateMatch[2]);
+    const year = fullDateMatch[3];
+    if (!day || !month) return 'tháng tới';
 
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = match[3];
-  if (!day || !month) return 'tháng tới';
+    return `ngày ${day} tháng ${month} năm ${year}`;
+  }
 
-  return `ngày ${day} tháng ${month} năm ${year}`;
+  const shortDateMatch = value.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
+  if (shortDateMatch) {
+    const day = Number(shortDateMatch[1]);
+    const month = Number(shortDateMatch[2]);
+    if (!day || !month) return 'tháng tới';
+
+    return `ngày ${day} tháng ${month}`;
+  }
+
+  return 'tháng tới';
 }
 
 function derivePurposeLabel(isBusiness?: boolean, fallbackPurpose?: string): string {
