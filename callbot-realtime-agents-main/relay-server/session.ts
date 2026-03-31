@@ -166,6 +166,7 @@ export class CallSession {
       leadId:             cd.leadId ?? cd.lead_id,
       phoneNumber:        this.opts.phone,
       displayAgentName:   cd.display_agent_name,
+      voiceId:            this.opts.voiceId || cd.voice_id,
       overrideGender:     cd.gender,
       overrideName:       cd.name,
       overridePlate:      cd.plate,
