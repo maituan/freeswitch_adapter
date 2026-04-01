@@ -235,7 +235,7 @@ function buildLeadgenScriptVars(
 }
 
 const VOICE_INTRO_TEMPLATES: Record<string, string> = {
-  'thanh-thao-v2':
+  'thanh-thao-v1':
     'Dạ em chào {gender}. em gọi cho mình từ bên đơn vị bảo hiểm ô tô ấy ạ. Thì em gọi để làm lại bảo hiểm cho con xe {BKS} nhà mình á, là {expiry_date} nó hết hạn bảo hiểm á {gender} {name}. {gender} cho em viết nối hạn và gửi bản giấy về nhà cho {gender} nhá',
   'ngoc-khanh-v3':
     'Dạ em chào {gender} {name}, em là {agent_name}, em gọi cho {gender} ở bên Công ty bảo hiểm ô tô á. em thấy xe nhà mình gần đến hạn bảo hiểm rồi, {gender} cho em viết nối hạn và gửi bản giấy về nhà cho {gender} nhá',
