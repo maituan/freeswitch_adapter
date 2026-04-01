@@ -383,6 +383,7 @@ func handleAnswer(ev *eventsocket.Event) {
 			log.Printf("[Filler] PlayAudio error: %v uuid=%s", err, uuid)
 			return
 		}
+		sess.FillerPlaying = true
 		fillerPlaying = 1
 	}
 
@@ -393,6 +394,8 @@ func handleAnswer(ev *eventsocket.Event) {
 		log.Printf("[Filler] stopping filler uuid=%s", uuid)
 		esl.StopPlayback(uuid)
 		fillerPlaying = 0
+		// Don't clear sess.FillerPlaying here — let handlePlaybackStop see it
+		// when the PLAYBACK_STOP event arrives from uuid_break.
 	}
 
 	// FIFO writer goroutine: creates a fresh FIFO per utterance to avoid
@@ -717,10 +720,14 @@ func handlePlaybackStop(ev *eventsocket.Event) {
 	if sess == nil {
 		return
 	}
-	log.Printf("[Call] PLAYBACK_STOP uuid=%s status=%s", uuid, sess.GetStatus())
+	log.Printf("[Call] PLAYBACK_STOP uuid=%s status=%s filler=%v", uuid, sess.GetStatus(), sess.FillerPlaying)
+	if sess.FillerPlaying {
+		// Filler finished — don't reset BotSpeaking or LastActivity.
+		// This prevents silence timeout from being reset by filler playback.
+		sess.FillerPlaying = false
+		return
+	}
 	sess.SetBotSpeaking(false)
-	// Don't call TouchActivity() here — bot finishing speech is not user activity.
-	// This allows silence timeout to fire when user has hung up but SIP BYE was not sent.
 	// Notify relay so it can unmute ASR / trigger its own endcall cleanup.
 	sess.SendToRelay(relay.ControlMsg{
 		Type:      "event",

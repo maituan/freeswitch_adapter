@@ -15,7 +15,8 @@ type CallSession struct {
 	PlaybackUUID string    // loopback-b UUID — use for uuid_broadcast so recording captures bot voice
 	StartTime    time.Time
 	LastActivity time.Time // last user speech or bot activity
-	BotSpeaking  bool     // true while TTS is being played
+	BotSpeaking    bool   // true while TTS is being played
+	FillerPlaying  bool   // true while filler WAV is being played
 	RelayConn    *relay.Client
 	CleanupFunc  func(string) // callable cleanup, argument is reason string
 	mu           sync.RWMutex
@@ -43,10 +44,12 @@ func (s *CallSession) GetLastActivity() time.Time {
 func (s *CallSession) SetBotSpeaking(v bool) {
 	s.mu.Lock()
 	s.BotSpeaking = v
-	// Reset LastActivity on both transitions:
-	// true  → bot starts speaking (activity)
-	// false → bot stops speaking (user's turn starts, reset silence timer)
-	s.LastActivity = time.Now()
+	// Only reset LastActivity when bot STOPS speaking (v=false).
+	// This gives the user a full silence timeout window to respond.
+	// Do NOT reset when bot starts speaking — that would mask user inactivity.
+	if !v {
+		s.LastActivity = time.Now()
+	}
 	s.mu.Unlock()
 }
 
