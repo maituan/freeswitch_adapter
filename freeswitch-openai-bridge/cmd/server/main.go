@@ -590,8 +590,8 @@ func handleAnswer(ev *eventsocket.Event) {
 						burstChunks++
 					} else {
 						if burstChunks > 5 {
-							//log.Printf("[AudioIn] BURST detected: %d chunks in <2ms each (last gap=%v) uuid=%s",
-								burstChunks, gap, uuid)
+							// log.Printf("[AudioIn] BURST detected: %d chunks in <2ms each (last gap=%v) uuid=%s",
+							// 	burstChunks, gap, uuid)
 						}
 						burstChunks = 0
 					}
