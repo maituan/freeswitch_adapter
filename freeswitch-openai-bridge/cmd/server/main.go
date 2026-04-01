@@ -615,8 +615,8 @@ func handleAnswer(ev *eventsocket.Event) {
 				// Discard audio for 500ms after transition to let the burst pass.
 				if wasBotSpeaking {
 					wasBotSpeaking = false
-					drainUntil = time.Now().Add(500 * time.Millisecond)
-					log.Printf("[AudioIn] draining stale audio for 500ms after bot stop uuid=%s", uuid)
+					drainUntil = time.Now().Add(100 * time.Millisecond)
+					log.Printf("[AudioIn] draining stale audio for 100ms after bot stop uuid=%s", uuid)
 				}
 				if time.Now().Before(drainUntil) {
 					if err != nil {
