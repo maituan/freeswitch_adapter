@@ -44,12 +44,6 @@ func (s *CallSession) GetLastActivity() time.Time {
 func (s *CallSession) SetBotSpeaking(v bool) {
 	s.mu.Lock()
 	s.BotSpeaking = v
-	// Only reset LastActivity when bot STOPS speaking (v=false).
-	// This gives the user a full silence timeout window to respond.
-	// Do NOT reset when bot starts speaking — that would mask user inactivity.
-	if !v {
-		s.LastActivity = time.Now()
-	}
 	s.mu.Unlock()
 }
 

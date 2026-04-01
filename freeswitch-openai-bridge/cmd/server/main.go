@@ -672,17 +672,29 @@ func handleAnswer(ev *eventsocket.Event) {
 		go func() {
 			ticker := time.NewTicker(2 * time.Second)
 			defer ticker.Stop()
+			var wasBot bool
+			var checkStart time.Time
 			for range ticker.C {
 				st := sess.GetStatus()
 				if st != "active" {
 					return
 				}
 				if sess.IsBotSpeaking() {
+					wasBot = true
 					continue
 				}
-				elapsed := time.Since(sess.GetLastActivity())
+				// Bot just stopped speaking → reset checkStart
+				if wasBot {
+					wasBot = false
+					checkStart = time.Now()
+				}
+				if checkStart.IsZero() {
+					checkStart = time.Now()
+				}
+				elapsed := time.Since(checkStart)
 				if elapsed >= time.Duration(silenceTimeout)*time.Second {
-					log.Printf("[VAD] silence timeout (%ds) uuid=%s, ending call", silenceTimeout, uuid)
+					log.Printf("[VAD] silence timeout (%ds, checkStart=%v) uuid=%s, ending call",
+						silenceTimeout, checkStart.Format("15:04:05.000"), uuid)
 					// Stop stereo recording before killing channel (session still alive)
 					if sess.CallID != "" {
 						stereoPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", sess.CallID)
