@@ -680,6 +680,11 @@ func handleAnswer(ev *eventsocket.Event) {
 				elapsed := time.Since(sess.GetLastActivity())
 				if elapsed >= time.Duration(silenceTimeout)*time.Second {
 					log.Printf("[VAD] silence timeout (%ds) uuid=%s, ending call", silenceTimeout, uuid)
+					// Stop stereo recording before killing channel (session still alive)
+					if sess.CallID != "" {
+						stereoPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", sess.CallID)
+						esl.StopRecording(uuid, stereoPath)
+					}
 					esl.EndCall(uuid)
 					return
 				}
@@ -714,7 +719,8 @@ func handlePlaybackStop(ev *eventsocket.Event) {
 	}
 	log.Printf("[Call] PLAYBACK_STOP uuid=%s status=%s", uuid, sess.GetStatus())
 	sess.SetBotSpeaking(false)
-	sess.TouchActivity()
+	// Don't call TouchActivity() here — bot finishing speech is not user activity.
+	// This allows silence timeout to fire when user has hung up but SIP BYE was not sent.
 	// Notify relay so it can unmute ASR / trigger its own endcall cleanup.
 	sess.SendToRelay(relay.ControlMsg{
 		Type:      "event",
