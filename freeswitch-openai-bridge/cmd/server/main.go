@@ -394,7 +394,8 @@ func handleAnswer(ev *eventsocket.Event) {
 		log.Printf("[Filler] stopping filler uuid=%s", uuid)
 		esl.StopPlayback(uuid)
 		fillerPlaying = 0
-		sess.FillerPlaying = false
+		// Don't clear sess.FillerPlaying here — let handlePlaybackStop see it
+		// when the PLAYBACK_STOP event arrives from uuid_break.
 	}
 
 	// FIFO writer goroutine: creates a fresh FIFO per utterance to avoid
