@@ -257,13 +257,14 @@ const VOICE_INTRO_TEMPLATES: Record<string, string> = {
     'Em chào {gender} ạ, em là {agent_name}, em bên công ty bảo hiểm ô tô đây ạ. Bảo hiểm xe ô tô của nhà mình BKS {BKS} gần tới hạn rồi, em gọi để hỗ trợ gia hạn bảo hiểm mới cho {gender} ạ. Em viết bảo hiểm mới và gửi về cho {gender} nhé ạ',
   'vu_nhung_v1':
     'Em chào {gender}, em là {agent_name} bên bộ phận hỗ trợ và gia hạn bảo hiểm cho xe ô tô của nhà mình đây ạ. Em thấy nhà mình có chiếc xe ô tô {brand}, {num_seats} chỗ, biển số xe {BKS} sắp đến hạn bảo hiểm TNDS bắt buộc rồi đó {gender}. Em gọi nhắc hạn và hỗ trợ mình gia hạn nối tiếp để tránh bị gián đoạn khi tham gia giao thông cũng như nhận những phần quà tặng tri ân mà bên hãng dành cho xe nhà mình trong tháng này {gender} ạ.',
+  'default':
+    'Em chào {gender} {name}, em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô ạ. Thì à em thấy chiếc xe {brand} biển số {BKS} sắp hết hạn bảo hiểm vào {expiry_date}, à thì em xin phép gọi để hỗ trợ gia hạn cho mình {gender} {name} nhé.',
 };
-const DEFAULT_VOICE_ID = 'thanh-thao-v2';
 
 function buildIntroText(sessionId: string, state: LeadgenMultiAgentSessionState): string {
   const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
-  const voiceId = runtime.voiceId || DEFAULT_VOICE_ID;
-  const template = VOICE_INTRO_TEMPLATES[voiceId] ?? VOICE_INTRO_TEMPLATES[DEFAULT_VOICE_ID];
+  const voiceId = runtime.voiceId || 'default';
+  const template = VOICE_INTRO_TEMPLATES[voiceId] ?? VOICE_INTRO_TEMPLATES['default'];
   const vars = buildLeadgenScriptVars(sessionId, state);
 
   return template
