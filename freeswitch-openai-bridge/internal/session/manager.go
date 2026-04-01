@@ -43,9 +43,10 @@ func (s *CallSession) GetLastActivity() time.Time {
 func (s *CallSession) SetBotSpeaking(v bool) {
 	s.mu.Lock()
 	s.BotSpeaking = v
-	if v {
-		s.LastActivity = time.Now()
-	}
+	// Reset LastActivity on both transitions:
+	// true  → bot starts speaking (activity)
+	// false → bot stops speaking (user's turn starts, reset silence timer)
+	s.LastActivity = time.Now()
 	s.mu.Unlock()
 }
 
