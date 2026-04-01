@@ -238,7 +238,7 @@ const VOICE_INTRO_TEMPLATES: Record<string, string> = {
   'thanh-thao-v2':
     'Em chào {gender} {name}, em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô ạ. Thì à em thấy chiếc xe {brand} biển số {BKS} sắp hết hạn bảo hiểm vào {expiry_date}, à thì em xin phép gọi để hỗ trợ gia hạn cho mình {gender} {name} nhé.',
   'ngoc-khanh-v3':
-    'Em chào {gender} {name}, em là {agent_name}, em gọi cho {gender} ở bên Công ty bảo hiểm ô tô ạ. Xe ô tô biển số {BKS} gần đến hạn bảo hiểm rồi, {gender} cho em viết nối hạn và gửi bản giấy về nhà cho {gender} ạ. Hiện tại bên em đang có chương trình chiết khấu và quà tặng cho khách hàng khi mua BH dân sự và BH thân vỏ, em báo giá {gender} tham khảo ạ',
+    'Dạ em chào {gender} {name}, em là {agent_name}, em gọi cho {gender} ở bên Công ty bảo hiểm ô tô á. em thấy xe nhà mình gần đến hạn bảo hiểm rồi, {gender} cho em viết nối hạn và gửi bản giấy về nhà cho {gender} nhá',
   'duong_duyen_v1':
     'Em chào {gender} {name}, em {agent_name} gọi cho {gender} từ công ty bảo hiểm xe oto. Em nhận được thông tin xe {brand}, BKS {BKS}, {num_seats} chỗ sắp đến hạn bảo hiểm trách nhiệm dân sự. {gender} mình gia hạn lại luôn chứ em hỗ trợ cho ạ',
   'pham_nhung_v1':
