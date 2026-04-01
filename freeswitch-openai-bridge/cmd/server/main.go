@@ -590,8 +590,8 @@ func handleAnswer(ev *eventsocket.Event) {
 						burstChunks++
 					} else {
 						if burstChunks > 5 {
-							log.Printf("[AudioIn] BURST detected: %d chunks in <2ms each (last gap=%v) uuid=%s",
-								burstChunks, gap, uuid)
+							// log.Printf("[AudioIn] BURST detected: %d chunks in <2ms each (last gap=%v) uuid=%s",
+							// 	burstChunks, gap, uuid)
 						}
 						burstChunks = 0
 					}
@@ -615,8 +615,8 @@ func handleAnswer(ev *eventsocket.Event) {
 				// Discard audio for 500ms after transition to let the burst pass.
 				if wasBotSpeaking {
 					wasBotSpeaking = false
-					drainUntil = time.Now().Add(500 * time.Millisecond)
-					log.Printf("[AudioIn] draining stale audio for 500ms after bot stop uuid=%s", uuid)
+					drainUntil = time.Now().Add(100 * time.Millisecond)
+					log.Printf("[AudioIn] draining stale audio for 100ms after bot stop uuid=%s", uuid)
 				}
 				if time.Now().Before(drainUntil) {
 					if err != nil {
@@ -680,6 +680,11 @@ func handleAnswer(ev *eventsocket.Event) {
 				elapsed := time.Since(sess.GetLastActivity())
 				if elapsed >= time.Duration(silenceTimeout)*time.Second {
 					log.Printf("[VAD] silence timeout (%ds) uuid=%s, ending call", silenceTimeout, uuid)
+					// Stop stereo recording before killing channel (session still alive)
+					if sess.CallID != "" {
+						stereoPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", sess.CallID)
+						esl.StopRecording(uuid, stereoPath)
+					}
 					esl.EndCall(uuid)
 					return
 				}
@@ -714,7 +719,8 @@ func handlePlaybackStop(ev *eventsocket.Event) {
 	}
 	log.Printf("[Call] PLAYBACK_STOP uuid=%s status=%s", uuid, sess.GetStatus())
 	sess.SetBotSpeaking(false)
-	sess.TouchActivity()
+	// Don't call TouchActivity() here — bot finishing speech is not user activity.
+	// This allows silence timeout to fire when user has hung up but SIP BYE was not sent.
 	// Notify relay so it can unmute ASR / trigger its own endcall cleanup.
 	sess.SendToRelay(relay.ControlMsg{
 		Type:      "event",
