@@ -56,8 +56,8 @@ function resolveDiscountPercent(value: unknown, fallback?: number): number {
 function normalizeGenderValue(raw?: string): string {
   const value = String(raw ?? '').trim().toLowerCase();
   if (!value) return 'Anh';
-  if (value === 'anh') return 'Anh';
-  if (value === 'chi' || value === 'chị') return 'Chị';
+  if (value === 'anh' || value === 'male') return 'Anh';
+  if (value === 'chi' || value === 'chị' || value === 'female') return 'Chị';
   return raw?.trim() || 'Anh';
 }
 
