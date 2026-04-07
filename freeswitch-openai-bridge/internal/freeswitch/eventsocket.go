@@ -3,6 +3,7 @@ package freeswitch
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,19 +16,17 @@ type EventHandler func(event *eventsocket.Event)
 
 type EventSocket struct {
 	conn       *eventsocket.Connection // event-only connection (HandleEvents loop)
-	apiConn    *eventsocket.Connection // short API commands (uuid_record, uuid_broadcast, etc.)
-	origConn   *eventsocket.Connection // dedicated for originate (long-blocking)
+	apiConn    *eventsocket.Connection // short API commands + bgapi originate
 	config     *config.FreeSWITCHConfig
 	handlers   map[string]EventHandler
-	preProcess func(*eventsocket.Event) // called synchronously before handler dispatch
+	preProcess func(*eventsocket.Event)
+	bgJobs     sync.Map // jobUUID → chan string (for bgapi result delivery)
 	mu         sync.Mutex
-	apiMu      sync.Mutex // serializes short API commands on apiConn
-	origMu     sync.Mutex // serializes originate on origConn (never blocks apiMu)
+	apiMu      sync.Mutex // serializes API commands on apiConn
 }
 
 // SetPreProcess registers a function that runs synchronously in the event loop
-// before any handler goroutine is dispatched. Use this for time-critical tracking
-// (e.g., recording loopback UUIDs before SIP leg handlers run).
+// before any handler goroutine is dispatched.
 func (es *EventSocket) SetPreProcess(fn func(*eventsocket.Event)) {
 	es.mu.Lock()
 	es.preProcess = fn
@@ -69,36 +68,23 @@ func (es *EventSocket) maintainConnection() {
 				continue
 			}
 
-			log.Printf("[ESL] Connecting originate channel to %s...", es.config.Host)
-			origConn, err := eventsocket.Dial(es.config.Host, es.config.Password)
-			if err != nil {
-				log.Printf("[ESL] Originate connect failed: %v. Retrying in 5s...", err)
-				conn.Close()
-				apiConn.Close()
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
 			es.mu.Lock()
 			es.conn = conn
 			es.apiConn = apiConn
-			es.origConn = origConn
 			es.mu.Unlock()
 
 			if err := es.subscribe(); err != nil {
 				log.Printf("[ESL] Subscribe failed: %v", err)
 				conn.Close()
 				apiConn.Close()
-				origConn.Close()
 				es.mu.Lock()
 				es.conn = nil
 				es.apiConn = nil
-				es.origConn = nil
 				es.mu.Unlock()
 				continue
 			}
 
-			log.Printf("[ESL] All connections ready (event + API + originate)")
+			log.Printf("[ESL] Both connections ready (event + API)")
 
 			// Blocks until connection drops
 			es.HandleEvents()
@@ -109,10 +95,6 @@ func (es *EventSocket) maintainConnection() {
 			if es.apiConn != nil {
 				es.apiConn.Close()
 				es.apiConn = nil
-			}
-			if es.origConn != nil {
-				es.origConn.Close()
-				es.origConn = nil
 			}
 			es.mu.Unlock()
 		}
@@ -127,6 +109,7 @@ func (es *EventSocket) subscribe() error {
 		"CHANNEL_HANGUP",
 		"CHANNEL_HANGUP_COMPLETE",
 		"PLAYBACK_STOP",
+		"BACKGROUND_JOB",
 	}
 
 	for _, event := range events {
@@ -166,6 +149,16 @@ func (es *EventSocket) processEvent(ev *eventsocket.Event) {
 	eventName := ev.Get("Event-Name")
 	uuid := ev.Get("Unique-Id")
 
+	// Handle BACKGROUND_JOB results — deliver to waiting goroutine
+	if eventName == "BACKGROUND_JOB" {
+		jobUUID := ev.Get("Job-UUID")
+		body := ev.Body
+		if ch, ok := es.bgJobs.LoadAndDelete(jobUUID); ok {
+			ch.(chan string) <- body
+		}
+		return
+	}
+
 	log.Printf("[ESL] Event: %s [UUID: %s]", eventName, uuid)
 
 	es.mu.Lock()
@@ -182,6 +175,8 @@ func (es *EventSocket) processEvent(ev *eventsocket.Event) {
 	}
 }
 
+// SendAPI sends a short API command on the dedicated API connection.
+// Serialized via apiMu so commands don't interleave. Timeout 5s.
 func (es *EventSocket) SendAPI(command string) (string, error) {
 	es.mu.Lock()
 	c := es.apiConn
@@ -225,14 +220,12 @@ func (es *EventSocket) SendAPI(command string) (string, error) {
 		es.mu.Lock()
 		es.apiConn = nil
 		es.mu.Unlock()
-		// Trigger reconnect in background
 		go es.reconnectAPI()
 		return "", fmt.Errorf("api timeout: %s", command)
 	}
 }
 
 // reconnectAPI creates a new API connection in the background.
-// Called when SendAPI detects a timeout and closes the old connection.
 func (es *EventSocket) reconnectAPI() {
 	log.Printf("[ESL] Reconnecting API channel to %s...", es.config.Host)
 	conn, err := eventsocket.Dial(es.config.Host, es.config.Password)
@@ -242,7 +235,6 @@ func (es *EventSocket) reconnectAPI() {
 	}
 	es.mu.Lock()
 	if es.apiConn != nil {
-		// Another goroutine already reconnected
 		conn.Close()
 	} else {
 		es.apiConn = conn
@@ -251,72 +243,52 @@ func (es *EventSocket) reconnectAPI() {
 	es.mu.Unlock()
 }
 
-// reconnectOrig creates a new originate connection in the background.
-func (es *EventSocket) reconnectOrig() {
-	log.Printf("[ESL] Reconnecting originate channel to %s...", es.config.Host)
-	conn, err := eventsocket.Dial(es.config.Host, es.config.Password)
-	if err != nil {
-		log.Printf("[ESL] Originate reconnect failed: %v", err)
-		return
-	}
-	es.mu.Lock()
-	if es.origConn != nil {
-		conn.Close()
-	} else {
-		es.origConn = conn
-		log.Printf("[ESL] Originate channel reconnected")
-	}
-	es.mu.Unlock()
-}
-
-// SendOriginate sends an originate command on its own dedicated connection.
-// Uses origMu (not apiMu) so it never blocks short commands like uuid_broadcast.
-// Timeout 30s (originate waits for callee to answer).
+// SendOriginate sends an originate command via bgapi (non-blocking).
+// Returns the result body from FS. apiMu is held only ~1ms for the bgapi send.
+// The actual wait (up to 60s) happens on a per-job channel, not holding any mutex.
 func (es *EventSocket) SendOriginate(command string) (string, error) {
+	// Send bgapi command — holds apiMu for ~1ms
 	es.mu.Lock()
-	c := es.origConn
+	c := es.apiConn
 	es.mu.Unlock()
 
 	if c == nil {
 		return "", fmt.Errorf("FreeSWITCH not connected")
 	}
 
-	es.origMu.Lock()
-	defer es.origMu.Unlock()
+	es.apiMu.Lock()
+	log.Printf("[ESL] bgapi orig >> %s", command)
+	ev, err := c.Send(fmt.Sprintf("bgapi %s", command))
+	es.apiMu.Unlock()
 
-	log.Printf("[ESL] orig >> %s", command)
-
-	type sendResult struct {
-		ev  *eventsocket.Event
-		err error
+	if err != nil {
+		log.Printf("[ESL] bgapi orig << ERROR: %v", err)
+		return "", fmt.Errorf("originate bgapi: %w", err)
 	}
-	done := make(chan sendResult, 1)
-	go func() {
-		ev, err := c.Send(fmt.Sprintf("api %s", command))
-		done <- sendResult{ev, err}
-	}()
+
+	var jobUUID string
+	if ev != nil {
+		jobUUID = ev.Get("Job-UUID")
+	}
+	if jobUUID == "" {
+		return "", fmt.Errorf("originate bgapi: no Job-UUID returned")
+	}
+	log.Printf("[ESL] bgapi orig << Job-UUID: %s", jobUUID)
+
+	// Wait for BACKGROUND_JOB event with this jobUUID
+	ch := make(chan string, 1)
+	es.bgJobs.Store(jobUUID, ch)
 
 	select {
-	case r := <-done:
-		if r.err != nil {
-			log.Printf("[ESL] orig << ERROR: %v", r.err)
-			return "", fmt.Errorf("originate: %w", r.err)
-		}
-		var result string
-		if r.ev != nil {
-			result = r.ev.Body
-		}
-		log.Printf("[ESL] orig << %s", result)
+	case result := <-ch:
+		result = strings.TrimSpace(result)
+		log.Printf("[ESL] bgapi orig result [%s]: %s", jobUUID, result)
 		return result, nil
 
-	case <-time.After(30 * time.Second):
-		log.Printf("[ESL] orig << TIMEOUT (30s) — closing origConn to recover")
-		c.Close()
-		es.mu.Lock()
-		es.origConn = nil
-		es.mu.Unlock()
-		go es.reconnectOrig()
-		return "", fmt.Errorf("originate timeout")
+	case <-time.After(60 * time.Second):
+		es.bgJobs.Delete(jobUUID)
+		log.Printf("[ESL] bgapi orig TIMEOUT (60s) job=%s", jobUUID)
+		return "", fmt.Errorf("originate timeout (60s)")
 	}
 }
 
@@ -357,9 +329,5 @@ func (es *EventSocket) Close() {
 	if es.apiConn != nil {
 		es.apiConn.Close()
 		es.apiConn = nil
-	}
-	if es.origConn != nil {
-		es.origConn.Close()
-		es.origConn = nil
 	}
 }
