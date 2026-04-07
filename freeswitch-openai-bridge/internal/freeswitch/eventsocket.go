@@ -153,10 +153,19 @@ func (es *EventSocket) processEvent(ev *eventsocket.Event) {
 	if eventName == "BACKGROUND_JOB" {
 		jobUUID := ev.Get("Job-UUID")
 		body := ev.Body
+		log.Printf("[ESL] BACKGROUND_JOB job=%s body=%q", jobUUID, body)
 		if ch, ok := es.bgJobs.LoadAndDelete(jobUUID); ok {
 			ch.(chan string) <- body
+		} else {
+			log.Printf("[ESL] BACKGROUND_JOB no waiting goroutine for job=%s", jobUUID)
 		}
 		return
+	}
+
+	// Log content-type for debugging unknown events
+	ct := ev.Get("Content-Type")
+	if ct == "command/reply" || eventName == "" {
+		log.Printf("[ESL] non-event message: content-type=%s body=%q", ct, ev.Body)
 	}
 
 	log.Printf("[ESL] Event: %s [UUID: %s]", eventName, uuid)
