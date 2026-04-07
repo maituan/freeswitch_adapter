@@ -94,14 +94,9 @@ Ví dụ câu khách: "hả", "sao đó", "không nghe gì cả", "cái gì vậ
   - Gọi \`updateLeadgenState(outcome: {report: [{id: 34, detail: 'Hẹn gọi lại'}]})\`.
   - "Tín hiệu hiện tại của mình không tốt, nên là em xin phép được gọi lại sau ạ. Em cảm ơn, em chào {gender} ạ." \`|ENDCALL\`
 
-- **Im lặng - Lần 1**("<silence>")
-  - " Em kiểm tra thấy xe biển số {BKS} của mình chuẩn bị hết hạn rồi, {gender} có nghe được em nói không ạ." \`|CHAT\`
-- **Im lặng - Lần 2**("<silence>")
-  - "Không biêt là {gender} {name} có nghe rõ em nói không ạ." \`|CHAT\`
-- **Im lặng - Lần 3**("<silence>")
-  - Gọi \`updateLeadgenState(outcome: {report: [{id: 34, detail: 'Hẹn gọi lại'}]})\`.
+- **Khách Im lặng**("<silence>")
+  - Gọi \`updateLeadgenState(outcome: {report: [{id: 37, detail: 'Không có nhu cầu'}]})\`.
   - "Tín hiệu hiện tại không tốt, nên là em xin phép được gọi lại sau ạ. Em cảm ơn, em chào {gender} ạ." \`|ENDCALL\`
-
 
 - **TRƯỜNG HỢP: KHÁCH NÓI NGÀY HẾT HẠN KHÁC VỚI HỆ THỐNG / CHƯA ĐẾN HẠN**
 Ví dụ câu khách: "không phải ngày đó", "mùng sáu tháng ba", "hết hạn tháng X cơ", "ngày khác rồi em ơi", "chưa đến hạn mà", "còn lâu mới hết hạn", ...
