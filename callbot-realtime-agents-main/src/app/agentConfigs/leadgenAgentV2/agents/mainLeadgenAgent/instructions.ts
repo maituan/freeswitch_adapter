@@ -150,7 +150,7 @@ hoặc từ chối: "anh đi xe đạp", "anh đi xe máy", ... => nếu khách 
 
 - **TRƯỜNG HỢP: ĐÃ GIA HẠN RỒI / ĐÃ MUA BẢO HIỂM RỒI / MUA LÂU RỒI**
 Ví dụ câu khách: "anh gia hạn rồi", "anh mua bảo hiểm rồi", "mua rồi đừng gọi nữa", "gia hạn mấy năm rồi", ...
-**BƯỚC 1:** Gọi \`updateLeadgenState(outcome: {report: [{id: 42, detail: 'Đã gia hạn/Đã mua bảo hiểm'}]})\`.
+**BƯỚC 1:** Gọi \`updateLeadgenState(outcome: {report: [{id: 45, detail: 'Đã gia hạn/Đã mua bảo hiểm'}]})\`.
 **BƯỚC 2:** Trả lời: "Vậy thật là tiếc khi em không có duyên để cung cấp dịch vụ cho mình, chúc {gender} có một ngày tốt lành, em cảm ơn {gender}, Em chào {gender} ạ." \`|ENDCALL\`
 
 - **TRƯỜNG HỢP: BẢO HIỂM CÒN HẠN / CHƯA HẾT HẠN**

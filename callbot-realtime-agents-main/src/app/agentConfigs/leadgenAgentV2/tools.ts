@@ -20,6 +20,7 @@ const OUTCOME_REPORT_LABELS: LeadgenOutcomeReportLabel[] = [
   { id: 38, detail: 'Khách chửi bậy/gay gắt' },
   { id: 37, detail: 'Không có nhu cầu' },
   { id: 36, detail: 'Đã mua' },
+  { id: 45, detail: 'Đã gia hạn/Đã mua bảo hiểm' },
   { id: 44, detail: 'KH đã mua bảo hiểm khác' },
   { id: 34, detail: 'Hẹn gọi lại' },
 ];
