@@ -269,6 +269,14 @@ func (es *EventSocket) SendOriginate(command string) (string, error) {
 	var jobUUID string
 	if ev != nil {
 		jobUUID = ev.Get("Job-UUID")
+		if jobUUID == "" {
+			// Fallback: parse from Reply-Text "+OK Job-UUID: xxx"
+			replyText := ev.Get("Reply-Text")
+			log.Printf("[ESL] bgapi orig reply-text=%q body=%q", replyText, ev.Body)
+			if idx := strings.Index(replyText, "Job-UUID: "); idx >= 0 {
+				jobUUID = strings.TrimSpace(replyText[idx+len("Job-UUID: "):])
+			}
+		}
 	}
 	if jobUUID == "" {
 		return "", fmt.Errorf("originate bgapi: no Job-UUID returned")
