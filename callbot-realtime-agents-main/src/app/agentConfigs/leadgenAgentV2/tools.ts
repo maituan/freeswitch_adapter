@@ -191,7 +191,7 @@ function buildPricingContext(state: LeadgenMultiAgentSessionState, args?: CalcTn
   };
 }
 
-function buildLeadgenScriptVars(
+export function buildLeadgenScriptVars(
   sessionId: string,
   state: LeadgenMultiAgentSessionState,
   args?: CalcTndsFeeArgs,
@@ -262,7 +262,7 @@ const VOICE_INTRO_TEMPLATES: Record<string, string> = {
     'Em chào {gender} {name}, em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô ạ. Thì à em thấy chiếc xe {brand} biển số {BKS} sắp hết hạn bảo hiểm vào {expiry_date}, à thì em xin phép gọi để hỗ trợ gia hạn cho mình {gender} {name} nhé.',
 };
 
-function buildIntroText(sessionId: string, state: LeadgenMultiAgentSessionState): string {
+export function buildIntroText(sessionId: string, state: LeadgenMultiAgentSessionState): string {
   const runtime = getLeadgenMultiAgentRuntimeContext(sessionId);
   const voiceId = runtime.voiceId || 'default';
   const template = VOICE_INTRO_TEMPLATES[voiceId] ?? VOICE_INTRO_TEMPLATES['default'];

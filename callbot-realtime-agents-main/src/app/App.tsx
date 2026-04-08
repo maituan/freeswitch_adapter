@@ -43,8 +43,7 @@ import { insuranceCarebotScenario } from "@/app/agentConfigs/insuranceCarebot";
 import type { CampaignType, PreferredPronoun } from "@/app/agentConfigs/insuranceCarebot/core/contextSchema";
 import { createRenewalReminderAgent } from "@/app/agentConfigs/insuranceCarebot/scenarios/renewalReminderAgent";
 import { leadgenMultiAgentScenario, setLeadgenMultiAgentRuntimeContext } from "@/app/agentConfigs/leadgenMultiAgent";
-import { leadgenAgentV2Scenario } from "@/app/agentConfigs/leadgenAgentV2";
-import { setLeadgenAgentV2RuntimeContext } from "@/app/agentConfigs/leadgenAgentV2";
+import { leadgenAgentV2Scenario, setLeadgenAgentV2RuntimeContext, injectLeadgenAgentV2Context, buildLeadgenAgentV2IntroText, getLeadgenAgentV2State } from "@/app/agentConfigs/leadgenAgentV2";
 import { leadgenMultiAgentScenario as leadgenDatScenario, setLeadgenMultiAgentRuntimeContext as setLeadgenDatRuntimeContext } from "@/app/agentConfigs/leadgen_dat";
 
 // Map used by connect logic for scenarios defined via the SDK.
@@ -663,6 +662,11 @@ function App() {
         }
         // NOTE: Avoid output guardrails for abicHotline to prevent response loops.
 
+        // Inject context into leadgenAgentV2 instructions (avoid tool call overhead)
+        if (agentSetKey === 'leadgenAgentV2') {
+          injectLeadgenAgentV2Context(reorderedAgents, callSessionId);
+        }
+
         await connect({
           getEphemeralKey: async () => EPHEMERAL_KEY,
           initialAgents: reorderedAgents,
@@ -775,9 +779,35 @@ function App() {
       },
     });
 
-    // Send an initial 'hi' message to trigger the agent to greet the user
+    // Send an initial message to trigger the agent to greet the user
     if (shouldTriggerResponse) {
-      sendSimulatedUserMessage('hi');
+      if (agentSetKey === 'leadgenAgentV2') {
+        // Skip LLM for the first turn: build intro_text from template
+        // and inject directly as assistant message.
+        try {
+          const state = getLeadgenAgentV2State(callSessionId);
+          const introText = buildLeadgenAgentV2IntroText(callSessionId, state);
+          if (introText.trim()) {
+            const id = uuidv4().slice(0, 32);
+            addTranscriptMessage(id, "assistant", introText);
+            sendClientEvent({
+              type: 'conversation.item.create',
+              item: {
+                id,
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'text', text: `${introText}|CHAT` }],
+              },
+            });
+          } else {
+            sendSimulatedUserMessage('hi');
+          }
+        } catch {
+          sendSimulatedUserMessage('hi');
+        }
+      } else {
+        sendSimulatedUserMessage('hi');
+      }
     }
     return;
   }

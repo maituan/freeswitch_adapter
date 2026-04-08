@@ -2,7 +2,7 @@ import { WebSocket } from 'ws'
 import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
 import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext, PromptOverrides } from '../src/app/agentConfigs/leadgenMultiAgent'
-import { setLeadgenAgentV2RuntimeContext } from '../src/app/agentConfigs/leadgenAgentV2'
+import { setLeadgenAgentV2RuntimeContext, injectLeadgenAgentV2Context, buildLeadgenAgentV2IntroText } from '../src/app/agentConfigs/leadgenAgentV2'
 import { buildLeadgenMultiAgents as buildLeadgenDatAgents, setLeadgenMultiAgentRuntimeContext as setLeadgenDatRuntimeContext } from '../src/app/agentConfigs/leadgen_dat'
 import { getLeadgenMultiAgentState } from '../src/app/agentConfigs/leadgenMultiAgent/internal/sessionState'
 import { getLeadgenMultiAgentState as getLeadgenAgentV2State } from '../src/app/agentConfigs/leadgenAgentV2/internal/sessionState'
@@ -183,6 +183,7 @@ export class CallSession {
       setLeadgenMultiAgentRuntimeContext(leadgenRuntimeCtx)
     } else if (this.opts.scenario === 'leadgenAgentV2') {
       setLeadgenAgentV2RuntimeContext(leadgenRuntimeCtx)
+      injectLeadgenAgentV2Context(agents, leadgenRuntimeCtx.sessionId)
     } else if (this.opts.scenario === 'leadgen_dat') {
       setLeadgenDatRuntimeContext(leadgenRuntimeCtx)
     }
@@ -540,14 +541,20 @@ export class CallSession {
           }
           if (msg.type === 'go') {
             // Call has been answered — trigger the bot's opening message
-            this.log('received go → response.create')
-            this.isProcessing = true
-            this.realtimeSession?.transport.sendEvent({
-              type: 'response.create',
-              response: {
-                modalities: ['text'],
-              },
-            } as any)
+            if (this.opts.scenario === 'leadgenAgentV2') {
+              // Skip LLM for the first turn: build intro_text from template
+              // and send directly to TTS, saving 2 LLM round-trips.
+              void this.sendDirectIntro()
+            } else {
+              this.log('received go → response.create')
+              this.isProcessing = true
+              this.realtimeSession?.transport.sendEvent({
+                type: 'response.create',
+                response: {
+                  modalities: ['text'],
+                },
+              } as any)
+            }
           }
           if (msg.type === 'interrupt') {
             this.realtimeSession?.interrupt()
@@ -704,6 +711,88 @@ export class CallSession {
     this.ttsTotalBytes = 0
     this.ttsChunkIdx = 0
     this.llmTextBuffer = ''
+  }
+
+  /**
+   * Send the scripted intro_text directly to TTS without going through the LLM.
+   * Also injects the text as an assistant message into the OpenAI conversation
+   * so the LLM has context of what was said when it handles subsequent turns.
+   */
+  private async sendDirectIntro() {
+    try {
+      const sessionId = String(this.opts.customData?.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
+      const state = getLeadgenAgentV2State(sessionId)
+      const introText = buildLeadgenAgentV2IntroText(sessionId, state)
+
+      if (!introText.trim()) {
+        this.log('sendDirectIntro: empty intro_text, falling back to response.create')
+        this.isProcessing = true
+        this.realtimeSession?.transport.sendEvent({
+          type: 'response.create',
+          response: { modalities: ['text'] },
+        } as any)
+        return
+      }
+
+      this.log(`sendDirectIntro: "${introText.substring(0, 200)}"`)
+      this.isProcessing = true
+
+      // 1. Inject as assistant message in OpenAI conversation history
+      //    so the LLM knows what was already said on subsequent turns.
+      this.realtimeSession?.transport.sendEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: `${introText}|CHAT` }],
+        },
+      } as any)
+
+      // 2. Record in call history
+      this.addAssistantMessage(introText, `${introText}|CHAT`)
+      this.botSpokenOnce = true
+      this.sendEvent('server', 'agent_end', { rawText: `${introText}|CHAT`, text: introText })
+
+      // 3. Send directly to TTS
+      this.sendEvent('client', 'tts_start', { text: introText })
+      const mp = this.opts.mediaParams ?? {}
+      const ttsStartTime = new Date()
+      const ttsSpan = this.trace?.span({ name: 'tts', startTime: ttsStartTime, input: introText })
+      let totalBytes = 0
+      let chunkIdx = 0
+      let firstChunkTime: Date | null = null
+      const streamStart = Date.now()
+      const ttsVoice = this.opts.voiceId || undefined
+      const ttsTempo = mp.tts_tempo != null ? Number(mp.tts_tempo) : undefined
+      for await (const chunk of streamTTSAudio(introText, { resampleRate: 8000, voiceId: ttsVoice, tempo: ttsTempo })) {
+        chunkIdx++
+        if (chunkIdx === 1) firstChunkTime = new Date()
+        totalBytes += chunk.length
+        if (MUTE_DURING_PLAYBACK) {
+          const elapsed = Date.now() - streamStart
+          const remaining = Math.max(pcmDurationMs(totalBytes) - elapsed + 300, 300)
+          this.setPlaybackMute(remaining)
+        }
+        if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk)
+      }
+      const ttsElapsed = Date.now() - streamStart
+      const ttfc = firstChunkTime ? firstChunkTime.getTime() - ttsStartTime.getTime() : null
+      this.log(`sendDirectIntro TTS done chunks=${chunkIdx} bytes=${totalBytes} elapsed=${ttsElapsed}ms ttfc=${ttfc ?? '?'}ms voice=${ttsVoice ?? 'default'}`)
+      ttsSpan?.end({ endTime: new Date(), output: { totalBytes, elapsedMs: ttsElapsed, ttfcMs: ttfc, voice: ttsVoice ?? 'default' } })
+      this.sendEvent('client', 'tts_done', { totalBytes })
+      const silenceBytes = (8000 * 2 * 100) / 1000
+      if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.alloc(silenceBytes, 0))
+
+      this.isProcessing = false
+    } catch (err: any) {
+      this.logError('sendDirectIntro error:', err)
+      // Fallback to LLM if direct intro fails
+      this.isProcessing = true
+      this.realtimeSession?.transport.sendEvent({
+        type: 'response.create',
+        response: { modalities: ['text'] },
+      } as any)
+    }
   }
 
   private setPlaybackMute(durationMs: number) {
