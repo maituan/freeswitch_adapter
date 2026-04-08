@@ -39,6 +39,18 @@ function resolveSessionId(runContext: any): string {
   return String(cd.session_id ?? runContext?.context?.callId ?? '__default__').trim() || '__default__';
 }
 
+function normalizePlateForSpeech(raw?: string): string {
+  const plate = String(raw ?? '').trim().toUpperCase();
+  if (!plate) return '';
+  // Match Vietnamese plate: 2-digit province + 1-2 letter(s) + digits
+  // e.g. 29A30376, 51F12345, 30K14532
+  const match = plate.match(/^(\d{2})([A-Z]{1,2})[\s\-.]?(\d+)$/);
+  if (!match) return plate;
+  const [, province, letter, digits] = match;
+  const spaced = digits.split('').join(' ');
+  return `${province} ${letter}, ${spaced}`;
+}
+
 function nonEmpty(value?: string): string | undefined {
   const trimmed = String(value ?? '').trim();
   return trimmed || undefined;
@@ -212,7 +224,7 @@ export function buildLeadgenScriptVars(
     gender: normalizeGenderValue(state.slots.leadGender),
     name: nonEmpty(state.slots.leadName) ?? 'mình',
     agent_name: nonEmpty(runtime.displayAgentName) ?? 'Thảo',
-    BKS: nonEmpty(state.slots.plateNumber) ?? 'xe của mình',
+    BKS: normalizePlateForSpeech(state.slots.plateNumber) || 'xe của mình',
     phone_number: nonEmpty(runtime.phoneNumber) ?? '',
     num_seats: resolved.seats ? String(resolved.seats) : '',
     purpose,
