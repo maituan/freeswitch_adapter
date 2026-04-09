@@ -674,6 +674,7 @@ func handleAnswer(ev *eventsocket.Event) {
 			defer ticker.Stop()
 			var wasBot bool
 			var checkStart time.Time
+			sessionStart := time.Now()
 			for range ticker.C {
 				st := sess.GetStatus()
 				if st != "active" {
@@ -689,7 +690,18 @@ func handleAnswer(ev *eventsocket.Event) {
 					checkStart = time.Now()
 				}
 				if checkStart.IsZero() {
-					checkStart = time.Now()
+					// Bot hasn't spoken yet — don't start counting.
+					// Fallback: if bot never speaks for 30s, force timeout.
+					if time.Since(sessionStart) >= 30*time.Second {
+						log.Printf("[VAD] fallback timeout (bot never spoke) uuid=%s", uuid)
+						if sess.CallID != "" {
+							stereoPath := fmt.Sprintf("/var/lib/freeswitch/recordings/voiceai/%s.mp3", sess.CallID)
+							esl.StopRecording(uuid, stereoPath)
+						}
+						esl.EndCall(uuid)
+						return
+					}
+					continue
 				}
 				elapsed := time.Since(checkStart)
 				if elapsed >= time.Duration(silenceTimeout)*time.Second {
