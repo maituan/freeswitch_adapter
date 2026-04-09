@@ -812,6 +812,11 @@ export class CallSession {
     if (!this.endTime) this.endTime = new Date()
 
     this.trace?.update({ endTime: this.endTime })
+
+    // Post-call summary: ask the bot to summarize the call before closing session.
+    // The bot still has full conversation context in its OpenAI Realtime session.
+    await this.requestPostCallSummary()
+
     await this.flushHistory()
     await flushTelemetry()
 
@@ -828,6 +833,45 @@ export class CallSession {
     this.asrClient = null
     this.realtimeSession = null
     if (this.ws.readyState === WebSocket.OPEN) this.ws.close()
+  }
+
+  /**
+   * Send a summarize request to the bot via the still-open OpenAI Realtime session.
+   * The bot will call summarizeCall tool (or respond with text) based on full conversation history.
+   * Waits up to 5s for a response, then continues regardless.
+   */
+  private async requestPostCallSummary(): Promise<void> {
+    if (!this.realtimeSession || !this.history.length) return
+
+    try {
+      this.log('post-call summary: requesting...')
+
+      const transport = this.realtimeSession.transport as any
+      if (!transport || typeof transport.sendEvent !== 'function') {
+        this.log('post-call summary: no transport, skipping')
+        return
+      }
+
+      // Send a conversation item asking the bot to summarize
+      // Send a simple trigger — bot agent prompt has instructions for handling [SUMMARIZE]
+      transport.sendEvent('conversation.item.create', {
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: '[SUMMARIZE]' }],
+        },
+      })
+      transport.sendEvent('response.create', {
+        response: { modalities: ['text'] },
+      })
+
+      // Wait for the response (tool call will update sessionState)
+      await new Promise<void>(resolve => setTimeout(resolve, 5000))
+
+      this.log('post-call summary: done (waited 5s)')
+    } catch (e) {
+      this.logError('post-call summary failed:', e)
+    }
   }
 
   private addAssistantMessage(content: string, originContent: string) {
