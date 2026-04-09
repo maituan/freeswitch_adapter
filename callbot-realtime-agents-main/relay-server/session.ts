@@ -854,14 +854,16 @@ export class CallSession {
 
       // Send a conversation item asking the bot to summarize
       // Send a simple trigger — bot agent prompt has instructions for handling [SUMMARIZE]
-      transport.sendEvent('conversation.item.create', {
+      transport.sendEvent({
+        type: 'conversation.item.create',
         item: {
           type: 'message',
           role: 'user',
           content: [{ type: 'input_text', text: '[SUMMARIZE]' }],
         },
       })
-      transport.sendEvent('response.create', {
+      transport.sendEvent({
+        type: 'response.create',
         response: { modalities: ['text'] },
       })
 
