@@ -38,32 +38,18 @@ Dựa vào TOÀN BỘ lịch sử hội thoại (bao gồm cả lượt bot và 
 - 34 — Hẹn gọi lại
   Khách bận / không rảnh / hẹn gọi lại sau.
   Người nhà nghe máy / chủ xe đi vắng.
-  Không nghe rõ lần 3 (bot chào và hẹn gọi lại).
-  Khách im lặng không phản hồi (<silence>).
+  Khách không nghe rõ lần 3
   Xe đỗ bãi không dùng (kết hợp với 37).
   Ví dụ: "bận lắm gọi lại sau", "chồng tôi đi vắng rồi", "để kiểm tra lại rồi gọi lại".
 
 - 35 — Đồng ý / quan tâm
   Khách đồng ý, quan tâm, muốn gia hạn, muốn mua, muốn biết thêm, muốn nghe tư vấn.
   Khách chấp nhận bot gọi lại bằng số cá nhân.
+  => bot hẹn gọi lại bằng số cá nhân
   Ví dụ: "ok", "được", "ừ", "làm đi", "tư vấn giá cho anh", "ừ em cứ tư vấn đi", "ok em", "giá năm nay bao nhiêu", "anh muốn gia hạn".
   Lưu ý: Nếu khách đồng ý/quan tâm VÀ bot hẹn gọi lại bằng số cá nhân → luôn kết hợp với 39.
 
-- 37 — Không có nhu cầu
-  Khách từ chối cứng (từ lần 2 trở đi sau khi bot đã cứu 1 nhịp).
-  Sai số điện thoại.
-  Xe đỗ bãi không dùng (kết hợp với 34).
-  Không có xe / không đi xe nào.
-  Xe công ty nhưng KHÔNG cung cấp số kế toán.
-  Khách từ chối mềm lần 1 + không cho Zalo ở lần sau.
-  Ví dụ: "không cần đâu" (lần 2), "anh không có xe", "sai số rồi em", "không quan tâm, đừng gọi nữa".
-  Phân biệt với 41: Khách nói "không có xe" (37) khác với "đã bán xe" (41).
-
-- 38 — Khách chửi bậy / gay gắt
-  Khách nói tục, chửi bậy, lăng mạ, đe dọa, thái độ gay gắt.
-  Ví dụ: "mày biến đi", "đ** mẹ gọi hoài", "tao kiện mày".
-
-- 39 — Khách hàng tiềm năng
+  - 39 — Khách hàng tiềm năng
   Bất kỳ tình huống nào khách vẫn còn giá trị follow-up:
   a) Khách có xe khác muốn tư vấn (xe hiện tại khác xe trong hệ thống).
   b) Khách đồng ý bot gọi lại bằng số cá nhân (luôn kết hợp với 35).
@@ -73,6 +59,21 @@ Dựa vào TOÀN BỘ lịch sử hội thoại (bao gồm cả lượt bot và 
   f) Bot chốt cuộc gọi bằng "gọi lại bằng số cá nhân" + khách ok.
   g) Quá 5 câu ngoài luồng → bot hẹn gọi lại bằng số cá nhân (kết hợp với 34).
   Ví dụ: "anh đang đi xe Toyota", "ừ gọi lại đi", "cho số kế toán là 09xxx", "tháng sau gọi lại cho anh".
+
+- 37 — Không có nhu cầu
+  Khách từ chối cứng (từ lần 2 trở đi sau khi bot đã cứu 1 nhịp).
+  Sai số điện thoại.
+  Xe đỗ bãi không dùng (kết hợp với 34).
+  Không có xe / không đi xe nào.
+  Xe công ty nhưng KHÔNG cung cấp số kế toán.
+  Khách từ chối mềm lần 1 + không cho Zalo ở lần sau.
+  Khách "<silence>"(im lặng)
+  Ví dụ: "không cần đâu" (lần 2), "anh không có xe", "sai số rồi em", "không quan tâm, đừng gọi nữa".
+  Phân biệt với 41: Khách nói "không có xe" (37) khác với "đã bán xe" (41).
+
+- 38 — Khách chửi bậy / gay gắt
+  Khách nói tục, chửi bậy, lăng mạ, đe dọa, thái độ gay gắt.
+  Ví dụ: "mày biến đi", "đ** mẹ gọi hoài", "tao kiện mày".
 
 - 41 — KH bán xe
   Khách đã bán xe / xe không còn sử dụng / không chạy nữa.
@@ -87,8 +88,10 @@ Dựa vào TOÀN BỘ lịch sử hội thoại (bao gồm cả lượt bot và 
 
 - 44 — KH đã mua bảo hiểm khác
   Khách đã mua bảo hiểm ở chỗ khác / ở đăng kiểm / ở đại lý khác.
-  Ví dụ: "anh mua ở đăng kiểm rồi", "mua ở chỗ khác rồi", "bên X bán cho anh rồi".
-  Phân biệt với 45: Khách nói rõ "mua ở chỗ khác" (44) khác với "đã gia hạn rồi" không nói rõ ở đâu (45).
+  Khách nói đã có chỗ mua rồi / có chỗ rồi / có người làm rồi / có đại lý rồi.
+  Ví dụ: "anh mua ở đăng kiểm rồi", "mua ở chỗ khác rồi", "bên X bán cho anh rồi", "có chỗ rồi", "mình có chỗ rồi bạn ơi", "có người làm rồi", "có đại lý quen rồi", "có chỗ mua rồi không cần".
+  Phân biệt với 45: Khách nói rõ "mua ở chỗ khác" hoặc "có chỗ rồi" (44) khác với "đã gia hạn rồi" không nói rõ ở đâu (45).
+  Phân biệt với 37: Khách nói "có chỗ rồi" / "có người làm rồi" là 44 (đã có nơi mua), KHÔNG phải 37 (không có nhu cầu).
 
 - 45 — Đã gia hạn / Đã mua bảo hiểm
   Khách đã gia hạn hoặc đã mua bảo hiểm rồi (không nhấn mạnh mua ở đâu).
@@ -150,6 +153,7 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 ## Nhóm 9: Đã mua / đã gia hạn
 - Đã gia hạn rồi / đã mua bảo hiểm rồi (không nói rõ ở đâu) → [45]
 - Đã mua ở chỗ khác / ở đăng kiểm / ở đại lý khác → [44]
+- Khách nói "có chỗ rồi" / "có người làm rồi" / "có đại lý quen rồi" → [44]
 - Đã mua ở chỗ khác + xin được Zalo → [44, 33]
 - Đã mua ở chỗ khác + không cho Zalo → [44]
 
@@ -187,6 +191,12 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 - Nếu bot kết thúc bằng |ENDCALL với lời hẹn gọi lại bằng số cá nhân + khách đã ok trước đó → [35, 39].
 - Nhãn 43 chỉ dùng khi THỰC SỰ không thể phân loại. Nếu có bất kỳ tín hiệu nào rõ ràng, hãy gán nhãn cụ thể.
 - Một cuộc gọi có thể có tối đa 3-4 nhãn nếu có nhiều sự kiện xảy ra (VD: bán xe + có xe mới + đồng ý callback = [41, 35, 39]).
+
+# PHÂN BIỆT [34] VÀ [35, 39] KHI BOT NÓI "GỌI LẠI"
+- Nhãn 34 (Hẹn gọi lại) CHỈ dùng khi KHÁCH chủ động nói bận / hẹn gọi lại / không rảnh / người nhà nghe máy.
+- Khi BOT chủ động nói "gọi lại bằng số cá nhân" / "liên hệ lại qua số cá nhân" / "em sẽ liên hệ lại" mà khách KHÔNG từ chối → gán [35, 39], KHÔNG gán [34].
+- Khách hỏi về giá / ưu đãi / muốn biết thêm → đây là quan tâm → bot hẹn callback → [35, 39].
+- Chỉ kết hợp [34] khi khách rõ ràng nói "gọi lại sau", "tháng sau gọi lại", "bận giờ gọi lại" → [39, 34].
 
 # OUTPUT
 Trả về JSON array chỉ chứa các id (number). Ví dụ: [35, 39]
