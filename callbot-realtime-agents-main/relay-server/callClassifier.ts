@@ -110,7 +110,7 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 
 ## Nhóm 1: Khách đồng ý / quan tâm
 - Khách đồng ý/quan tâm + bot hẹn gọi lại bằng số cá nhân → [35, 39]
-- Khách nói "ok", "được", "ừ", "làm đi" khi bot đề nghị gia hạn → [35, 39] (vì bot luôn chuyển FLOW_3 = gọi lại số cá nhân)
+- Khách nói "ok", "được", "ừ", "làm đi", "giá bao nhiêu" khi bot đề nghị gia hạn → [35, 39] (vì bot luôn chuyển FLOW_3 = gọi lại số cá nhân)
 - Khách hỏi giá / muốn tư vấn giá + bot hẹn callback → [35, 39]
 - Khách quan tâm ưu đãi gia hạn sớm → [35, 39]
 
@@ -127,9 +127,10 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 - Khách nói "để kiểm tra lại rồi gọi lại" → [34]
 - Khách muốn gia hạn sau / tháng sau / lúc khác → [39, 34]
 
-## Nhóm 4: Vấn đề kỹ thuật cuộc gọi
+## Nhóm 4: Vấn đề kỹ thuật cuộc gọi / im lặng
 - Không nghe rõ lần 3 (bot chào và hẹn gọi lại) → [34]
-- Khách im lặng (<silence>) → [34]
+- Khách im lặng (<silence>) NGAY SAU greeting (cuộc gọi chỉ có greeting + silence + bot ENDCALL) → [37] (không có nhu cầu, KHÔNG phải 43)
+- QUAN TRỌNG: Cuộc gọi ngắn chỉ có greeting + silence + bot ENDCALL → LUÔN gán [37], KHÔNG gán [43]. Nhãn 43 chỉ khi không thể phân loại được ý định.
 
 ## Nhóm 5: Người nhà / sai số
 - Người nhà nghe máy (vợ/chồng/bạn nghe hộ, chủ xe đi vắng) → [34]
@@ -182,10 +183,6 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 ## Nhóm 15: Quá 5 câu ngoài luồng
 - Bot chốt cuộc gọi vì quá nhiều câu ngoài luồng + hẹn gọi lại số cá nhân → [39, 34]
 
-## Nhóm 16: Không xác định
-- Cuộc gọi quá ngắn, chỉ có greeting → [43]
-- Không rõ ý khách, không đủ thông tin → [43]
-
 # LƯU Ý QUAN TRỌNG
 - Luôn đọc toàn bộ hội thoại, ưu tiên KẾT QUẢ CUỐI CÙNG của cuộc gọi (ý định cuối cùng của khách trước khi kết thúc).
 - Nếu khách thay đổi ý định trong cuộc gọi (VD: từ chối → sau đó đồng ý), lấy ý định CUỐI.
@@ -198,6 +195,11 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 - Khi BOT chủ động nói "gọi lại bằng số cá nhân" / "liên hệ lại qua số cá nhân" / "em sẽ liên hệ lại" mà khách KHÔNG từ chối → gán [35, 39], KHÔNG gán [34].
 - Khách hỏi về giá / ưu đãi / muốn biết thêm → đây là quan tâm → bot hẹn callback → [35, 39].
 - Chỉ kết hợp [34] khi khách rõ ràng nói "gọi lại sau", "tháng sau gọi lại", "bận giờ gọi lại" → [39, 34].
+
+# QUAN TRỌNG NHẤT
+- Nếu bot kết thúc bằng |ENDCALL với lời hẹn gọi lại bằng số cá nhân → [39].
+- Khách quan tâm/đồng ý => [35, 39]
+- Nhiều nội dung cần trao đổi thêm => [39]
 
 # OUTPUT
 Trả về JSON array chỉ chứa các id (number). Ví dụ: [35, 39]
