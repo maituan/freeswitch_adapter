@@ -300,22 +300,5 @@ Ví dụ câu khách: "mua đối phó thôi", "có được tích sự gì đâ
   Khi đạt 5 câu ngoài luồng, chốt ngay:
      "À thì vì mình có nhiều nội dung cần trao đổi nên em sợ hỗ trợ qua tổng đài chưa được đầy đủ. Em xin phép liên hệ lại với {gender} qua số cá nhân để tư vấn kỹ hơn cho mình nhé ạ."\`|ENDCALL\`
 
-# QUY TẮC TỔNG HỢP SAU CUỘC GỌI
-- KHÔNG gọi tool \`updateLeadgenState\` với \`outcome.report\` trong quá trình hội thoại.
-- Khi nhận message "[SUMMARIZE]" từ hệ thống (sau khi cuộc gọi đã kết thúc):
-  - Dựa vào TOÀN BỘ lịch sử hội thoại, phân loại kết quả cuộc gọi.
-  - Gọi tool \`updateLeadgenState\` với outcome.report phù hợp.
-  - KHÔNG trả lời text. Chỉ gọi tool.
-  - Danh sách report ID:
-    - {id: 33, detail: 'Đồng ý kết bạn Zalo'}
-    - {id: 34, detail: 'Hẹn gọi lại'}
-    - {id: 35, detail: 'Đồng ý/quan tâm'}
-    - {id: 37, detail: 'Không có nhu cầu'}
-    - {id: 39, detail: 'Khách hàng tiềm năng'}
-    - {id: 41, detail: 'KH bán xe'}
-    - {id: 43, detail: 'Không xác định'}
-    - {id: 44, detail: 'KH đã mua bảo hiểm khác'}
-    - {id: 45, detail: 'Đã gia hạn/Đã mua bảo hiểm'}
-
 {CONTEXT_BLOCK}
 `;

@@ -11,6 +11,7 @@ import { AsrClient } from './asrClient'
 import { streamTTSAudio, StreamingTTS } from '../src/app/lib/ttsClient'
 import { CallHistoryMessage, CallHistoryPayload, sendCallHistory } from './kafka'
 import { createCallTrace, flushTelemetry, fetchPrompt } from './telemetry'
+import { classifyCallReport } from './callClassifier'
 
 // Set DEBUG_LOGS=true to enable verbose history/transport event logs
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true'
@@ -813,11 +814,21 @@ export class CallSession {
 
     this.trace?.update({ endTime: this.endTime })
 
-    // Post-call summary: ask the bot to summarize the call before closing session.
-    // The bot still has full conversation context in its OpenAI Realtime session.
-    await this.requestPostCallSummary()
+    // Post-call classify: use Chat API to classify call outcome from history.
+    // Runs before flushHistory so report is included in the Kafka payload.
+    let classifiedReport: Array<{ id: number; detail: string }> | undefined
+    const leadgenScenarios = ['leadgenMultiAgent', 'leadgenAgentV2', 'leadgen_dat']
+    if (leadgenScenarios.includes(this.opts.scenario) && this.history.length > 0) {
+      try {
+        this.log('post-call classify: requesting...')
+        classifiedReport = await classifyCallReport(this.history)
+        this.log(`post-call classify: result=${JSON.stringify(classifiedReport)}`)
+      } catch (e) {
+        this.logError('post-call classify failed:', e)
+      }
+    }
 
-    await this.flushHistory()
+    await this.flushHistory(classifiedReport)
     await flushTelemetry()
 
     if (this.endcallFallbackTimer) {
@@ -833,47 +844,6 @@ export class CallSession {
     this.asrClient = null
     this.realtimeSession = null
     if (this.ws.readyState === WebSocket.OPEN) this.ws.close()
-  }
-
-  /**
-   * Send a summarize request to the bot via the still-open OpenAI Realtime session.
-   * The bot will call summarizeCall tool (or respond with text) based on full conversation history.
-   * Waits up to 5s for a response, then continues regardless.
-   */
-  private async requestPostCallSummary(): Promise<void> {
-    if (!this.realtimeSession || !this.history.length) return
-
-    try {
-      this.log('post-call summary: requesting...')
-
-      const transport = this.realtimeSession.transport as any
-      if (!transport || typeof transport.sendEvent !== 'function') {
-        this.log('post-call summary: no transport, skipping')
-        return
-      }
-
-      // Send a conversation item asking the bot to summarize
-      // Send a simple trigger — bot agent prompt has instructions for handling [SUMMARIZE]
-      transport.sendEvent({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text: '[SUMMARIZE]' }],
-        },
-      })
-      transport.sendEvent({
-        type: 'response.create',
-        response: { modalities: ['text'] },
-      })
-
-      // Wait for the response (tool call will update sessionState)
-      await new Promise<void>(resolve => setTimeout(resolve, 5000))
-
-      this.log('post-call summary: done (waited 5s)')
-    } catch (e) {
-      this.logError('post-call summary failed:', e)
-    }
   }
 
   private addAssistantMessage(content: string, originContent: string) {
@@ -902,41 +872,52 @@ export class CallSession {
     this.history.push(msg)
   }
 
-  private async flushHistory() {
+  private async flushHistory(classifiedReport?: Array<{ id: number; detail: string }>) {
     const cd = this.opts.customData ?? {}
     const callId = this.opts.callId || this.opts.phone || cd.leadId || ''
     if (!callId || !this.history.length) return
 
-    // Get outcome from leadgenMultiAgent sessionState (in-memory store)
-    // Format report as array of { id, detail, created_at }
+    const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
     let report: any = undefined
-    const leadgenScenarios = ['leadgenMultiAgent', 'leadgenAgentV2', 'leadgen_dat']
-    if (leadgenScenarios.includes(this.opts.scenario)) {
-      try {
-        const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
-        const stateFn = this.opts.scenario === 'leadgenAgentV2' ? getLeadgenAgentV2State
-          : this.opts.scenario === 'leadgen_dat' ? getLeadgenDatState
-          : getLeadgenMultiAgentState
-        const state = stateFn(sessionId)
-        if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
-          const endedAt = (state.outcome.endedAt ?? new Date().toISOString()).replace(/\.\d{3}Z$/, 'Z')
-          report = state.outcome.report.map((r: any) => ({
-            id: r.id,
-            detail: r.detail,
-            created_at: endedAt,
-          }))
+
+    // Priority 1: classified report from Chat API (post-call classifier)
+    if (classifiedReport && classifiedReport.length > 0) {
+      report = classifiedReport.map((r) => ({ id: r.id, detail: r.detail, created_at: now }))
+      this.log(`flushHistory: using classified report (${report.length} labels)`)
+    }
+
+    // Priority 2: outcome from in-memory sessionState (tool calls during conversation)
+    if (!report) {
+      const leadgenScenarios = ['leadgenMultiAgent', 'leadgenAgentV2', 'leadgen_dat']
+      if (leadgenScenarios.includes(this.opts.scenario)) {
+        try {
+          const sessionId = String(cd.session_id ?? this.opts.callId ?? '').trim() || this.opts.callId
+          const stateFn = this.opts.scenario === 'leadgenAgentV2' ? getLeadgenAgentV2State
+            : this.opts.scenario === 'leadgen_dat' ? getLeadgenDatState
+            : getLeadgenMultiAgentState
+          const state = stateFn(sessionId)
+          if (state?.outcome && Array.isArray(state.outcome.report) && state.outcome.report.length > 0) {
+            const endedAt = (state.outcome.endedAt ?? now)
+            report = state.outcome.report.map((r: any) => ({
+              id: r.id,
+              detail: r.detail,
+              created_at: endedAt,
+            }))
+            this.log(`flushHistory: using state report (${report.length} labels)`)
+          }
+        } catch (e) {
+          this.logError('Failed to get leadgen outcome:', e)
         }
-      } catch (e) {
-        this.logError('Failed to get leadgen outcome:', e)
       }
     }
-    // Fallback to legacy _report from realtimeSession context
+
+    // Priority 3: legacy _report from realtimeSession context
     if (!report) {
       report = (this.realtimeSession as any)?.context?.context?._report ?? undefined
     }
-    // Default report if bot didn't call updateLeadgenState with outcome
+
+    // Priority 4: fallback heuristic from last bot text
     if (!report || (Array.isArray(report) && report.length === 0)) {
-      const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
       const lastBot = [...this.history].reverse().find(m => m.role === 'assistant')
       const lastText = (lastBot?.origin_content || lastBot?.content || '').toLowerCase()
 
@@ -948,6 +929,7 @@ export class CallSession {
       } else {
         report = [{ id: 43, detail: 'Không xác định', created_at: now }]
       }
+      this.log(`flushHistory: using fallback report`)
     }
 
     const payload: CallHistoryPayload = {
