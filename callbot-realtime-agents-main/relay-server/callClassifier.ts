@@ -88,10 +88,11 @@ Dựa vào TOÀN BỘ lịch sử hội thoại (bao gồm cả lượt bot và 
 
 - 44 — KH đã mua bảo hiểm khác
   Khách đã mua bảo hiểm ở chỗ khác / ở đăng kiểm / ở đại lý khác.
-  Khách nói đã có chỗ mua rồi / có chỗ rồi / có người làm rồi / có đại lý rồi.
-  Ví dụ: "anh mua ở đăng kiểm rồi", "mua ở chỗ khác rồi", "bên X bán cho anh rồi", "có chỗ rồi", "mình có chỗ rồi bạn ơi", "có người làm rồi", "có đại lý quen rồi", "có chỗ mua rồi không cần".
+  Khách nói đã có chỗ mua rồi / có chỗ rồi / có người làm rồi / có đại lý rồi / có người nhà biết rồi / có người quen lo rồi.
+  Ví dụ: "anh mua ở đăng kiểm rồi", "mua ở chỗ khác rồi", "bên X bán cho anh rồi", "có chỗ rồi", "mình có chỗ rồi bạn ơi", "có người làm rồi", "có đại lý quen rồi", "có chỗ mua rồi không cần", "có người nhà biết rồi", "có người quen lo rồi", "anh có người nhà biết rồi em nhá".
   Phân biệt với 45: Khách nói rõ "mua ở chỗ khác" hoặc "có chỗ rồi" (44) khác với "đã gia hạn rồi" không nói rõ ở đâu (45).
-  Phân biệt với 37: Khách nói "có chỗ rồi" / "có người làm rồi" là 44 (đã có nơi mua), KHÔNG phải 37 (không có nhu cầu).
+  Phân biệt với 37: Khách nói "có chỗ rồi" / "có người làm rồi" / "có người nhà biết rồi" là 44 (đã có nơi mua), KHÔNG phải 37 (không có nhu cầu).
+  Phân biệt với 34: Khách nói "có người nhà biết rồi" (44 — có người lo BH) khác với "chồng tôi đi vắng" (34 — người nhà nghe máy hộ). Nhãn 34 chỉ khi người nhà NGHE MÁY thay chủ xe, KHÔNG phải khi khách nói có người nhà lo bảo hiểm.
 
 - 45 — Đã gia hạn / Đã mua bảo hiểm
   Khách đã gia hạn hoặc đã mua bảo hiểm rồi (không nhấn mạnh mua ở đâu).
@@ -153,7 +154,7 @@ Khi có nhiều tín hiệu trong cùng cuộc gọi, áp dụng thứ tự ưu 
 ## Nhóm 9: Đã mua / đã gia hạn
 - Đã gia hạn rồi / đã mua bảo hiểm rồi (không nói rõ ở đâu) → [45]
 - Đã mua ở chỗ khác / ở đăng kiểm / ở đại lý khác → [44]
-- Khách nói "có chỗ rồi" / "có người làm rồi" / "có đại lý quen rồi" → [44]
+- Khách nói "có chỗ rồi" / "có người làm rồi" / "có đại lý quen rồi" / "có người nhà viết rồi" → [44]
 - Đã mua ở chỗ khác + xin được Zalo → [44, 33]
 - Đã mua ở chỗ khác + không cho Zalo → [44]
 
