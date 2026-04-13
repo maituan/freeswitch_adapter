@@ -43,7 +43,7 @@ import { insuranceCarebotScenario } from "@/app/agentConfigs/insuranceCarebot";
 import type { CampaignType, PreferredPronoun } from "@/app/agentConfigs/insuranceCarebot/core/contextSchema";
 import { createRenewalReminderAgent } from "@/app/agentConfigs/insuranceCarebot/scenarios/renewalReminderAgent";
 import { leadgenMultiAgentScenario, setLeadgenMultiAgentRuntimeContext } from "@/app/agentConfigs/leadgenMultiAgent";
-import { leadgenAgentV2Scenario, setLeadgenAgentV2RuntimeContext, injectLeadgenAgentV2Context, buildLeadgenAgentV2IntroText, getLeadgenAgentV2State } from "@/app/agentConfigs/leadgenAgentV2";
+import { leadgenAgentV2Scenario, setLeadgenAgentV2RuntimeContext, injectLeadgenAgentV2Context, buildLeadgenAgentV2IntroText, getLeadgenAgentV2State, buildLeadgenAgentV2Agents } from "@/app/agentConfigs/leadgenAgentV2";
 import { leadgenMultiAgentScenario as leadgenDatScenario, setLeadgenMultiAgentRuntimeContext as setLeadgenDatRuntimeContext } from "@/app/agentConfigs/leadgen_dat";
 
 // Map used by connect logic for scenarios defined via the SDK.
@@ -490,7 +490,10 @@ function App() {
         if (!EPHEMERAL_KEY) return;
 
         // Ensure the selectedAgentName is first so that it becomes the root
-        const reorderedAgents = [...sdkScenarioMap[agentSetKey]];
+        // Build fresh agents for leadgenAgentV2 to avoid instruction contamination across sessions
+        const reorderedAgents = agentSetKey === 'leadgenAgentV2'
+          ? buildLeadgenAgentV2Agents()
+          : [...sdkScenarioMap[agentSetKey]];
         // customData is passed to tools via runContext.context.customData (single source of truth).
         let customData: Record<string, any> = {};
         const idx = reorderedAgents.findIndex((a) => a.name === selectedAgentName);

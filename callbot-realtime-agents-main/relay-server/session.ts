@@ -2,7 +2,7 @@ import { WebSocket } from 'ws'
 import { RealtimeSession } from '@openai/agents/realtime'
 import { allAgentSets } from '../src/app/agentConfigs/index'
 import { buildLeadgenMultiAgents, setLeadgenMultiAgentRuntimeContext, PromptOverrides } from '../src/app/agentConfigs/leadgenMultiAgent'
-import { setLeadgenAgentV2RuntimeContext, injectLeadgenAgentV2Context, buildLeadgenAgentV2IntroText } from '../src/app/agentConfigs/leadgenAgentV2'
+import { setLeadgenAgentV2RuntimeContext, injectLeadgenAgentV2Context, buildLeadgenAgentV2IntroText, buildLeadgenAgentV2Agents } from '../src/app/agentConfigs/leadgenAgentV2'
 import { buildLeadgenMultiAgents as buildLeadgenDatAgents, setLeadgenMultiAgentRuntimeContext as setLeadgenDatRuntimeContext } from '../src/app/agentConfigs/leadgen_dat'
 import { getLeadgenMultiAgentState } from '../src/app/agentConfigs/leadgenMultiAgent/internal/sessionState'
 import { getLeadgenMultiAgentState as getLeadgenAgentV2State } from '../src/app/agentConfigs/leadgenAgentV2/internal/sessionState'
@@ -147,6 +147,8 @@ export class CallSession {
     let agents: any
     if (this.opts.scenario === 'leadgenMultiAgent') {
       agents = buildLeadgenMultiAgents(promptOverrides)
+    } else if (this.opts.scenario === 'leadgenAgentV2') {
+      agents = buildLeadgenAgentV2Agents()
     } else if (this.opts.scenario === 'leadgen_dat') {
       agents = buildLeadgenDatAgents()
     } else {

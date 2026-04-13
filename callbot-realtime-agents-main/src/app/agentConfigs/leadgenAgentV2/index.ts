@@ -13,6 +13,14 @@ export const leadgenAgentV2Scenario = {
 };
 
 /**
+ * Build fresh agents per session to avoid instruction contamination across calls.
+ * Must be called instead of using the singleton leadgenAgentV2Scenario.agents.
+ */
+export function buildLeadgenAgentV2Agents(): RealtimeAgent[] {
+  return [createMainLeadgenAgent()];
+}
+
+/**
  * Inject context khách hàng vào instruction của agents trước khi connect.
  * Gọi hàm này 1 lần trước mỗi session connect.
  */

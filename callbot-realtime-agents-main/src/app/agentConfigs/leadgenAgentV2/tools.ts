@@ -115,25 +115,40 @@ function formatRoundedPriceForSpeech(value?: number): string {
 function formatExpiryDateForSpeech(raw?: string): string {
   const value = String(raw ?? '').trim();
   if (!value) return 'tháng tới';
-  if (!value.includes('/')) return value;
 
+  // ISO format: YYYY-MM-DD (e.g. "2026-04-23")
+  const isoMatch = value.match(/^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = Number(isoMatch[2]);
+    const day = Number(isoMatch[3]);
+    if (!day || !month) return 'tháng tới';
+    return `ngày ${day} tháng ${month} năm ${year}`;
+  }
+
+  // Full date: DD/MM/YYYY or DD-MM-YYYY (e.g. "23/04/2026", "23-04-2026")
   const fullDateMatch = value.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
   if (fullDateMatch) {
     const day = Number(fullDateMatch[1]);
     const month = Number(fullDateMatch[2]);
     const year = fullDateMatch[3];
     if (!day || !month) return 'tháng tới';
-
     return `ngày ${day} tháng ${month} năm ${year}`;
   }
 
-  const shortDateMatch = value.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
-  if (shortDateMatch) {
-    const day = Number(shortDateMatch[1]);
-    const month = Number(shortDateMatch[2]);
-    if (!day || !month) return 'tháng tới';
-
-    return `ngày ${day} tháng ${month}`;
+  // Short MM-YY or MM/YY (e.g. "04-25", "04/25") — month + 2-digit year
+  const mmyyMatch = value.match(/^(\d{1,2})[\/.-](\d{2})$/);
+  if (mmyyMatch) {
+    const a = Number(mmyyMatch[1]);
+    const b = Number(mmyyMatch[2]);
+    // If first number > 12 → treat as DD/MM (e.g. "25/04" = ngày 25 tháng 4)
+    if (a > 12) {
+      return `ngày ${a} tháng ${b}`;
+    }
+    // If second number <= 12 → ambiguous, but most likely MM-YY for expiry dates
+    // e.g. "04-25" → tháng 4 năm 2025
+    const year = b < 100 ? 2000 + b : b;
+    return `tháng ${a} năm ${year}`;
   }
 
   return 'tháng tới';
