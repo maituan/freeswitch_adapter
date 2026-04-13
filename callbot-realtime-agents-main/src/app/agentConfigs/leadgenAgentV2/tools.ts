@@ -112,6 +112,15 @@ function formatRoundedPriceForSpeech(value?: number): string {
   return `${formatPlainNumber(millions)} triệu ${formatPlainNumber(thousands)} nghìn`;
 }
 
+const MONTH_NAMES: Record<number, string> = {
+  1: 'giêng', 2: 'hai', 3: 'ba', 4: 'tư', 5: 'năm', 6: 'sáu',
+  7: 'bảy', 8: 'tám', 9: 'chín', 10: 'mười', 11: 'mười một', 12: 'mười hai',
+};
+
+function monthName(m: number): string {
+  return MONTH_NAMES[m] ?? String(m);
+}
+
 function formatExpiryDateForSpeech(raw?: string): string {
   const value = String(raw ?? '').trim();
   if (!value) return 'tháng tới';
@@ -123,7 +132,7 @@ function formatExpiryDateForSpeech(raw?: string): string {
     const month = Number(isoMatch[2]);
     const day = Number(isoMatch[3]);
     if (!day || !month) return 'tháng tới';
-    return `ngày ${day} tháng ${month} năm ${year}`;
+    return `ngày ${day} tháng ${monthName(month)} năm ${year}`;
   }
 
   // Full date: DD/MM/YYYY or DD-MM-YYYY (e.g. "23/04/2026", "23-04-2026")
@@ -133,7 +142,7 @@ function formatExpiryDateForSpeech(raw?: string): string {
     const month = Number(fullDateMatch[2]);
     const year = fullDateMatch[3];
     if (!day || !month) return 'tháng tới';
-    return `ngày ${day} tháng ${month} năm ${year}`;
+    return `ngày ${day} tháng ${monthName(month)} năm ${year}`;
   }
 
   // Short 2-part date: "04-29", "04/25", "25/04" etc.
@@ -143,15 +152,15 @@ function formatExpiryDateForSpeech(raw?: string): string {
     const b = Number(shortMatch[2]);
     // a > 12 → a must be day: DD-MM (e.g. "25/04" = ngày 25 tháng 4)
     if (a > 12) {
-      return `ngày ${a} tháng ${b}`;
+      return `ngày ${a} tháng ${monthName(b)}`;
     }
     // b > 12 → b must be day: MM-DD (e.g. "04-29" = ngày 29 tháng 4)
     if (b > 12) {
-      return `ngày ${b} tháng ${a}`;
+      return `ngày ${b} tháng ${monthName(a)}`;
     }
     // Both <= 12 → ambiguous, treat as MM-YY (e.g. "04-25" = tháng 4 năm 2025)
     const year = b < 100 ? 2000 + b : b;
-    return `tháng ${a} năm ${year}`;
+    return `tháng ${monthName(a)} năm ${year}`;
   }
 
   return 'tháng tới';
