@@ -136,17 +136,20 @@ function formatExpiryDateForSpeech(raw?: string): string {
     return `ngày ${day} tháng ${month} năm ${year}`;
   }
 
-  // Short MM-YY or MM/YY (e.g. "04-25", "04/25") — month + 2-digit year
-  const mmyyMatch = value.match(/^(\d{1,2})[\/.-](\d{2})$/);
-  if (mmyyMatch) {
-    const a = Number(mmyyMatch[1]);
-    const b = Number(mmyyMatch[2]);
-    // If first number > 12 → treat as DD/MM (e.g. "25/04" = ngày 25 tháng 4)
+  // Short 2-part date: "04-29", "04/25", "25/04" etc.
+  const shortMatch = value.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
+  if (shortMatch) {
+    const a = Number(shortMatch[1]);
+    const b = Number(shortMatch[2]);
+    // a > 12 → a must be day: DD-MM (e.g. "25/04" = ngày 25 tháng 4)
     if (a > 12) {
       return `ngày ${a} tháng ${b}`;
     }
-    // If second number <= 12 → ambiguous, but most likely MM-YY for expiry dates
-    // e.g. "04-25" → tháng 4 năm 2025
+    // b > 12 → b must be day: MM-DD (e.g. "04-29" = ngày 29 tháng 4)
+    if (b > 12) {
+      return `ngày ${b} tháng ${a}`;
+    }
+    // Both <= 12 → ambiguous, treat as MM-YY (e.g. "04-25" = tháng 4 năm 2025)
     const year = b < 100 ? 2000 + b : b;
     return `tháng ${a} năm ${year}`;
   }
