@@ -223,7 +223,7 @@ export function buildLeadgenScriptVars(
   return {
     gender: normalizeGenderValue(state.slots.leadGender),
     name: nonEmpty(state.slots.leadName) ?? 'mình',
-    agent_name: nonEmpty(runtime.displayAgentName) ?? 'Thảo',
+    agent_name: nonEmpty(runtime.displayAgentName) ?? VOICE_DEFAULT_AGENT_NAME[runtime.voiceId || ''] ?? 'Thảo',
     BKS: normalizePlateForSpeech(state.slots.plateNumber) || 'xe của mình',
     phone_number: nonEmpty(runtime.phoneNumber) ?? '',
     num_seats: resolved.seats ? String(resolved.seats) : '',
@@ -272,6 +272,20 @@ const VOICE_INTRO_TEMPLATES: Record<string, string> = {
     'Em chào {gender}, em là {agent_name} bên bộ phận hỗ trợ và gia hạn bảo hiểm cho xe ô tô của nhà mình đây ạ. Em thấy nhà mình có chiếc xe ô tô {brand}, {num_seats} chỗ, biển số xe {BKS} sắp đến hạn bảo hiểm TNDS bắt buộc rồi đó {gender}. Em gọi nhắc hạn và hỗ trợ mình gia hạn nối tiếp để tránh bị gián đoạn khi tham gia giao thông cũng như nhận những phần quà tặng tri ân mà bên hãng dành cho xe nhà mình trong tháng này {gender} ạ.',
   'default':
     'Em chào {gender} {name}, em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô ạ. Thì à em thấy chiếc xe {brand} biển số {BKS} sắp hết hạn bảo hiểm vào {expiry_date}, à thì em xin phép gọi để hỗ trợ gia hạn cho mình {gender} {name} nhé.',
+};
+
+const VOICE_DEFAULT_AGENT_NAME: Record<string, string> = {
+  'thanh-thao-v1': 'Thảo',
+  'ngoc-khanh-v3': 'Khánh',
+  'duong_duyen_v1': 'Duyên',
+  'pham_nhung_v1': 'Nhung',
+  'bui_khanh_v1': 'Khánh',
+  'le_ha_v1': 'Hà',
+  'tran_hang_v1': 'Hằng',
+  'nguyen_hang_v1': 'Hằng',
+  'hoang_mai_v1': 'Mai',
+  'nguyen_hong_v1': 'Hồng',
+  'vu_nhung_v1': 'Nhung',
 };
 
 export function buildIntroText(sessionId: string, state: LeadgenMultiAgentSessionState): string {

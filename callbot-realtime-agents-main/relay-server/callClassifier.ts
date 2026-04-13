@@ -222,7 +222,7 @@ export async function classifyCallReport(
 ): Promise<Array<{ id: number; detail: string }>> {
   if (!history.length) return []
 
-  const model = opts?.model ?? process.env.CLASSIFY_MODEL ?? 'gpt-4.1-mini'
+  const model = opts?.model ?? process.env.CLASSIFY_MODEL ?? 'gpt-5.4-mini'
   const timeoutMs = opts?.timeoutMs ?? 10_000
 
   // Format history as readable text for user message
