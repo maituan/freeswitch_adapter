@@ -236,7 +236,6 @@ export async function classifyCallReport(
       client.chat.completions.create({
         model,
         temperature: 0,
-        max_tokens: 100,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: historyText },
