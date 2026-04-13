@@ -270,7 +270,11 @@ const VOICE_INTRO_TEMPLATES: Record<string, string> = {
     'Em chào {gender} ạ, em là {agent_name}, em bên công ty bảo hiểm ô tô đây ạ. Bảo hiểm xe ô tô của nhà mình BKS {BKS} gần tới hạn rồi, em gọi để hỗ trợ gia hạn bảo hiểm mới cho {gender} ạ. Em viết bảo hiểm mới và gửi về cho {gender} nhé ạ',
   'vu_nhung_v1':
     'Em chào {gender}, em là {agent_name} bên bộ phận hỗ trợ và gia hạn bảo hiểm cho xe ô tô của nhà mình đây ạ. Em thấy nhà mình có chiếc xe ô tô {brand}, {num_seats} chỗ, biển số xe {BKS} sắp đến hạn bảo hiểm TNDS bắt buộc rồi đó {gender}. Em gọi nhắc hạn và hỗ trợ mình gia hạn nối tiếp để tránh bị gián đoạn khi tham gia giao thông cũng như nhận những phần quà tặng tri ân mà bên hãng dành cho xe nhà mình trong tháng này {gender} ạ.',
-  'default':
+  'duong_duyen_v2':
+    'Em chào {gender} {name}, em {agent_name} gọi cho {gender} từ công ty bảo hiểm xe oto. Em nhận được thông tin xe {brand}, BKS {BKS}, {num_seats} chỗ sắp đến hạn bảo hiểm trách nhiệm dân sự. {gender} mình gia hạn lại luôn chứ em hỗ trợ cho ạ',
+  'le_ha_v2':
+    'Em chào {gender}, em là {agent_name}, em gọi cho {gender} từ bên tổng đại lý bảo hiểm xe ô tô ạ. Em thấy xe {BKS} của mình sắp tới đây hết hạn bảo hiểm, đợt này bên em đang có nhiều ưu đãi em báo giá cho mình tham khảo nha',
+    'default':
     'Em chào {gender} {name}, em là {agent_name} gọi từ tổng đại lý bảo hiểm ô tô ạ. Thì à em thấy chiếc xe {brand} biển số {BKS} sắp hết hạn bảo hiểm vào {expiry_date}, à thì em xin phép gọi để hỗ trợ gia hạn cho mình {gender} {name} nhé.',
 };
 
@@ -278,9 +282,11 @@ const VOICE_DEFAULT_AGENT_NAME: Record<string, string> = {
   'thanh-thao-v1': 'Thảo',
   'ngoc-khanh-v3': 'Khánh',
   'duong_duyen_v1': 'Duyên',
+  'duong_duyen_v2': 'Duyên',
   'pham_nhung_v1': 'Nhung',
   'bui_khanh_v1': 'Khánh',
   'le_ha_v1': 'Hà',
+  'le_ha_v2': 'Hà',
   'tran_hang_v1': 'Hằng',
   'nguyen_hang_v1': 'Hằng',
   'hoang_mai_v1': 'Mai',
