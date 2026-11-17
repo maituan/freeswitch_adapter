@@ -17,6 +17,8 @@ services:
       - FS_DOMAIN=${FS_DOMAIN:-}
       - RELAY_URL=${RELAY_URL:-ws://localhost:8091}
       - RELAY_API_KEY=${RELAY_API_KEY:-}
+      - SILENCE_TIMEOUT=12
+
 
   # Next.js web UI + API routes — port 3000
   callbot-agents:

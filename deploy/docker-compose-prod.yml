@@ -11,12 +11,18 @@ services:
     network_mode: host
     volumes:
       - /dev/shm/bridge:/dev/shm/bridge
+      - /opt/filler/:/opt/filler
     environment:
       - FS_HOST=${FS_HOST:-127.0.0.1:8021}
       - FS_PASSWORD=${FS_PASSWORD:-ClueCon}
       - FS_DOMAIN=${FS_DOMAIN:-}
       - RELAY_URL=${RELAY_URL:-ws://localhost:8091}
       - RELAY_API_KEY=${RELAY_API_KEY:-}
+      - FILLER_ENABLED=true
+      - FILLER_PATH=/opt/filler
+      - SILENCE_TIMEOUT=12
+
+
 
   # Next.js web UI + API routes — port 3000
   callbot-agents:

@@ -59,7 +59,7 @@ function extractControlCommand(text: string): { action: string; ext?: string } |
 }
 
 export class CallSession {
-  private realtimeSession: RealtimeSession | null = null
+  private realtimeSession: RealtimeSession<any> | null = null
   private asrClient: AsrClient | null = null
   private playbackMuteTimer: ReturnType<typeof setTimeout> | null = null
   private isPlayingAudio = false
@@ -192,20 +192,19 @@ export class CallSession {
     }
 
     // 1. Create OpenAI Realtime session.
-    //    We use text-only input (ASR → text → OpenAI) so turn_detection and
-    //    input_audio_transcription are disabled via providerData to avoid
-    //    model errors (semantic_vad and gpt-4o-mini-transcribe are not
-    //    supported by all realtime models). Audio output drives external TTS.
+    //    We use text-only input (ASR → text → OpenAI) so turn detection and
+    //    input audio transcription are disabled (GA API: audio.input.*).
+    //    Output is text only; external TTS produces the voice.
     this.realtimeSession = new RealtimeSession(agents[0], {
       transport: 'websocket',
-      model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini-realtime-preview',
+      model: process.env.OPENAI_MODEL ?? 'gpt-realtime-mini',
       config: {
-        modalities: ['text'],
-        // Override SDK defaults that cause status=failed on gpt-4o-mini-realtime-preview.
-        // providerData is spread last so it overrides the computed defaults.
-        providerData: {
-          turn_detection: null,
-          input_audio_transcription: null,
+        outputModalities: ['text'],
+        audio: {
+          input: {
+            turnDetection: null,
+            transcription: null,
+          },
         },
       },
       context: { phone: this.opts.phone, leadId: cd.leadId ?? cd.lead_id, callId: this.opts.callId, customData: cd },
@@ -266,7 +265,7 @@ export class CallSession {
 
     this.realtimeSession.on('transport_event', (event: any) => {
       // Skip raw audio delta events — too noisy
-      if (event?.type === 'response.audio.delta' || event?.type === 'input_audio_buffer.append') return
+      if (event?.type === 'response.output_audio.delta' || event?.type === 'input_audio_buffer.append') return
       // Track response lifecycle to block ASR transcripts during generation
       if (event?.type === 'response.created') {
         this.isProcessing = true
@@ -274,11 +273,11 @@ export class CallSession {
         this.llmFirstTokenTime = null
         if (!this.turnLlmStartTime) this.turnLlmStartTime = this.llmGenStartTime
         this.logDebug('response.created → isProcessing=true')
-      } else if (event?.type === 'response.text.delta') {
+      } else if (event?.type === 'response.output_text.delta') {
         if (!this.llmFirstTokenTime) {
           this.llmFirstTokenTime = new Date()
           if (!this.turnLlmFirstTokenTime) this.turnLlmFirstTokenTime = this.llmFirstTokenTime
-          this.log(`response.text.delta FIRST TOKEN (turnLlmFirstTokenTime set)`)
+          this.log(`response.output_text.delta FIRST TOKEN (turnLlmFirstTokenTime set)`)
         }
         const delta = event?.delta ?? ''
         if (delta) this.feedLlmToken(delta)
@@ -464,25 +463,29 @@ export class CallSession {
 
     await this.realtimeSession.connect({ apiKey: process.env.OPENAI_API_KEY! })
 
-    // Patch transport to force modalities=['text'] on every outgoing event.
-    // After agent handoff the SDK may reset modalities to ['text','audio'],
+    // Patch transport to force output_modalities=['text'] on every outgoing event.
+    // After agent handoff the SDK may resend a session.update with audio output,
     // causing the model to generate audio (slow + unnecessary). This intercept
-    // ensures ALL session.update and response.create stay text-only.
+    // ensures ALL session.update and response.create stay text-only (GA API shape).
     const transport = this.realtimeSession.transport as any
     if (transport && typeof transport.sendEvent === 'function') {
       const origSend = transport.sendEvent.bind(transport)
       transport.sendEvent = (event: any) => {
         if (event?.type === 'session.update' && event?.session) {
-          event.session.modalities = ['text']
-          event.session.turn_detection = null
-          event.session.input_audio_transcription = null
+          event.session.output_modalities = ['text']
+          delete event.session.modalities
+          if (event.session.audio?.input) {
+            event.session.audio.input.turn_detection = null
+            event.session.audio.input.transcription = null
+          }
         }
         if (event?.type === 'response.create' && event?.response) {
-          event.response.modalities = ['text']
+          event.response.output_modalities = ['text']
+          delete event.response.modalities
         }
         return origSend(event)
       }
-      this.log('transport patched: force modalities=["text"]')
+      this.log('transport patched: force output_modalities=["text"]')
     }
 
     // 6. Connect ASR client; on transcript → forward event + feed isFinal to agent
@@ -554,7 +557,7 @@ export class CallSession {
               this.realtimeSession?.transport.sendEvent({
                 type: 'response.create',
                 response: {
-                  modalities: ['text'],
+                  output_modalities: ['text'],
                 },
               } as any)
             }
@@ -732,7 +735,7 @@ export class CallSession {
         this.isProcessing = true
         this.realtimeSession?.transport.sendEvent({
           type: 'response.create',
-          response: { modalities: ['text'] },
+          response: { output_modalities: ['text'] },
         } as any)
         return
       }
@@ -747,7 +750,7 @@ export class CallSession {
         item: {
           type: 'message',
           role: 'assistant',
-          content: [{ type: 'text', text: `${introText}|CHAT` }],
+          content: [{ type: 'output_text', text: `${introText}|CHAT` }],
         },
       } as any)
 
@@ -793,7 +796,7 @@ export class CallSession {
       this.isProcessing = true
       this.realtimeSession?.transport.sendEvent({
         type: 'response.create',
-        response: { modalities: ['text'] },
+        response: { output_modalities: ['text'] },
       } as any)
     }
   }
